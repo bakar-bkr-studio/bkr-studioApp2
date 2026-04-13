@@ -1,0 +1,37 @@
+# ========================
+# Dépendances
+# ========================
+node_modules/
+
+# ========================
+# Next.js
+# ========================
+.next/
+out/
+
+# ========================
+# Variables d'environnement
+# RÈGLE SÉCURITÉ : jamais commiter .env.local
+# ========================
+.env.local
+.env.*.local
+.env
+*firebase-adminsdk*.json
+
+# ========================
+# Système d'exploitation
+# ========================
+.DS_Store
+Thumbs.db
+
+# ========================
+# Éditeurs
+# ========================
+.vscode/
+.idea/
+
+# ========================
+# Logs
+# ========================
+*.log
+npm-debug.log*

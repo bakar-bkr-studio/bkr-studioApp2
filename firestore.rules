@@ -1,0 +1,354 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isNumber(value) {
+      return value is int || value is float;
+    }
+
+    function isNullableString(value) {
+      return value == null || value is string;
+    }
+
+    function isNullableNumber(value) {
+      return value == null || isNumber(value);
+    }
+
+    function isTimestampOrString(value) {
+      return value is timestamp || value is string;
+    }
+
+    function hasSchema(data, keys) {
+      return data.keys().hasAll(keys) && data.keys().hasOnly(keys);
+    }
+
+    function ownsExistingDoc() {
+      return isSignedIn() &&
+        resource.data.userId is string &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    function ownsIncomingDoc() {
+      return isSignedIn() &&
+        request.resource.data.userId is string &&
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    function keepsSameOwner() {
+      return request.resource.data.userId == resource.data.userId;
+    }
+
+    function isValidContactType(value) {
+      return value in ["client", "prospect", "partner"];
+    }
+
+    function isValidProjectStatus(value) {
+      return value in [
+        "lead",
+        "confirmed",
+        "in_progress",
+        "editing",
+        "delivered",
+        "completed",
+        "cancelled"
+      ];
+    }
+
+    function isValidTaskStatus(value) {
+      return value in ["todo", "in_progress", "done"];
+    }
+
+    function isValidTaskPriority(value) {
+      return value in ["low", "medium", "high"];
+    }
+
+    function isValidGoalType(value) {
+      return value in ["quantitative", "qualitative"];
+    }
+
+    function isValidGoalHorizon(value) {
+      return value in ["week", "month", "quarter", "year"];
+    }
+
+    function isValidGoalStatus(value) {
+      return value in ["active", "completed", "at_risk", "paused"];
+    }
+
+    function isValidTransactionType(value) {
+      return value in ["income", "expense"];
+    }
+
+    function isValidTransactionStatus(value) {
+      return value in ["completed", "planned"];
+    }
+
+    function isValidPaymentMethod(value) {
+      return value in ["transfer", "cash", "card", "mobile_money", "other"];
+    }
+
+    function isValidCurrency(value) {
+      return value in ["EUR", "USD", "NGN"];
+    }
+
+    function isValidContactDoc(data) {
+      return hasSchema(data, [
+        "userId",
+        "name",
+        "type",
+        "organization",
+        "email",
+        "phone",
+        "notes",
+        "createdAt",
+        "updatedAt"
+      ]) &&
+        data.userId is string &&
+        data.name is string &&
+        isValidContactType(data.type) &&
+        isNullableString(data.organization) &&
+        isNullableString(data.email) &&
+        isNullableString(data.phone) &&
+        isNullableString(data.notes) &&
+        isTimestampOrString(data.createdAt) &&
+        isTimestampOrString(data.updatedAt);
+    }
+
+    function isValidProjectDoc(data) {
+      return hasSchema(data, [
+        "userId",
+        "title",
+        "contactId",
+        "serviceType",
+        "status",
+        "shootDate",
+        "deliveryDate",
+        "amountQuoted",
+        "amountPaid",
+        "notes",
+        "createdAt",
+        "updatedAt"
+      ]) &&
+        data.userId is string &&
+        data.title is string &&
+        isNullableString(data.contactId) &&
+        data.serviceType is string &&
+        isValidProjectStatus(data.status) &&
+        isNullableString(data.shootDate) &&
+        isNullableString(data.deliveryDate) &&
+        isNumber(data.amountQuoted) &&
+        isNumber(data.amountPaid) &&
+        isNullableString(data.notes) &&
+        isTimestampOrString(data.createdAt) &&
+        isTimestampOrString(data.updatedAt);
+    }
+
+    function isValidTaskDoc(data) {
+      return hasSchema(data, [
+        "userId",
+        "title",
+        "description",
+        "status",
+        "priority",
+        "dueDate",
+        "projectId",
+        "createdAt",
+        "updatedAt"
+      ]) &&
+        data.userId is string &&
+        data.title is string &&
+        isNullableString(data.description) &&
+        isValidTaskStatus(data.status) &&
+        isValidTaskPriority(data.priority) &&
+        isNullableString(data.dueDate) &&
+        isNullableString(data.projectId) &&
+        isTimestampOrString(data.createdAt) &&
+        isTimestampOrString(data.updatedAt);
+    }
+
+    function isValidGoalDoc(data) {
+      return hasSchema(data, [
+        "userId",
+        "title",
+        "description",
+        "type",
+        "horizon",
+        "status",
+        "targetValue",
+        "currentValue",
+        "unit",
+        "dueDate",
+        "notes",
+        "createdAt",
+        "updatedAt"
+      ]) &&
+        data.userId is string &&
+        data.title is string &&
+        isNullableString(data.description) &&
+        isValidGoalType(data.type) &&
+        isValidGoalHorizon(data.horizon) &&
+        isValidGoalStatus(data.status) &&
+        (
+          (data.type == "qualitative" &&
+            data.targetValue == null &&
+            data.currentValue == null &&
+            data.unit == null) ||
+          (data.type == "quantitative" &&
+            isNullableNumber(data.targetValue) &&
+            isNullableNumber(data.currentValue) &&
+            isNullableString(data.unit))
+        ) &&
+        isNullableString(data.dueDate) &&
+        isNullableString(data.notes) &&
+        isTimestampOrString(data.createdAt) &&
+        isTimestampOrString(data.updatedAt);
+    }
+
+    function isValidTransactionDoc(data) {
+      return hasSchema(data, [
+        "userId",
+        "type",
+        "status",
+        "title",
+        "category",
+        "amount",
+        "date",
+        "paymentMethod",
+        "projectId",
+        "notes",
+        "createdAt",
+        "updatedAt"
+      ]) &&
+        data.userId is string &&
+        isValidTransactionType(data.type) &&
+        isValidTransactionStatus(data.status) &&
+        data.title is string &&
+        data.category is string &&
+        isNumber(data.amount) &&
+        data.date is string &&
+        isValidPaymentMethod(data.paymentMethod) &&
+        isNullableString(data.projectId) &&
+        isNullableString(data.notes) &&
+        isTimestampOrString(data.createdAt) &&
+        isTimestampOrString(data.updatedAt);
+    }
+
+    function isValidUserProfileDoc(data, userId) {
+      return hasSchema(data, [
+        "userId",
+        "firstName",
+        "lastName",
+        "displayName",
+        "businessName",
+        "role",
+        "specialty",
+        "email",
+        "phone",
+        "city",
+        "country",
+        "currency",
+        "bio",
+        "avatarUrl",
+        "dashboardNotes",
+        "usefulLinks",
+        "accountStatus",
+        "createdAt",
+        "updatedAt"
+      ]) &&
+        data.userId is string &&
+        data.userId == userId &&
+        data.firstName is string &&
+        data.lastName is string &&
+        data.displayName is string &&
+        isNullableString(data.businessName) &&
+        isNullableString(data.role) &&
+        isNullableString(data.specialty) &&
+        isNullableString(data.email) &&
+        isNullableString(data.phone) &&
+        isNullableString(data.city) &&
+        isNullableString(data.country) &&
+        isValidCurrency(data.currency) &&
+        isNullableString(data.bio) &&
+        isNullableString(data.avatarUrl) &&
+        isNullableString(data.dashboardNotes) &&
+        data.usefulLinks is list &&
+        data.accountStatus == "firebase" &&
+        isTimestampOrString(data.createdAt) &&
+        isTimestampOrString(data.updatedAt);
+    }
+
+    match /contacts/{contactId} {
+      allow read: if ownsExistingDoc();
+      allow create: if ownsIncomingDoc() && isValidContactDoc(request.resource.data);
+      allow update: if ownsExistingDoc() &&
+        ownsIncomingDoc() &&
+        keepsSameOwner() &&
+        isValidContactDoc(request.resource.data);
+      allow delete: if ownsExistingDoc();
+    }
+
+    match /projects/{projectId} {
+      allow read: if ownsExistingDoc();
+      allow create: if ownsIncomingDoc() && isValidProjectDoc(request.resource.data);
+      allow update: if ownsExistingDoc() &&
+        ownsIncomingDoc() &&
+        keepsSameOwner() &&
+        isValidProjectDoc(request.resource.data);
+      allow delete: if ownsExistingDoc();
+    }
+
+    match /tasks/{taskId} {
+      allow read: if ownsExistingDoc();
+      allow create: if ownsIncomingDoc() && isValidTaskDoc(request.resource.data);
+      allow update: if ownsExistingDoc() &&
+        ownsIncomingDoc() &&
+        keepsSameOwner() &&
+        isValidTaskDoc(request.resource.data);
+      allow delete: if ownsExistingDoc();
+    }
+
+    match /goals/{goalId} {
+      allow read: if ownsExistingDoc();
+      allow create: if ownsIncomingDoc() && isValidGoalDoc(request.resource.data);
+      allow update: if ownsExistingDoc() &&
+        ownsIncomingDoc() &&
+        keepsSameOwner() &&
+        isValidGoalDoc(request.resource.data);
+      allow delete: if ownsExistingDoc();
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if ownsExistingDoc();
+      allow create: if ownsIncomingDoc() && isValidTransactionDoc(request.resource.data);
+      allow update: if ownsExistingDoc() &&
+        ownsIncomingDoc() &&
+        keepsSameOwner() &&
+        isValidTransactionDoc(request.resource.data);
+      allow delete: if ownsExistingDoc();
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && userId == request.auth.uid;
+      allow create: if isSignedIn() &&
+        userId == request.auth.uid &&
+        ownsIncomingDoc() &&
+        isValidUserProfileDoc(request.resource.data, userId);
+      allow update: if isSignedIn() &&
+        userId == request.auth.uid &&
+        ownsExistingDoc() &&
+        ownsIncomingDoc() &&
+        keepsSameOwner() &&
+        isValidUserProfileDoc(request.resource.data, userId);
+      allow delete: if isSignedIn() &&
+        userId == request.auth.uid &&
+        ownsExistingDoc();
+    }
+
+    // deny by default for any collection/document not explicitly whitelisted.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

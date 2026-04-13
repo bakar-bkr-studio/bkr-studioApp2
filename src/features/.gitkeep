@@ -1,0 +1,7 @@
+// Ce dossier contiendra la logique métier par module V1.
+// Structure prévue :
+//   features/dashboard/
+//   features/projects/
+//   features/tasks/
+//   features/goals/
+//   features/finances/

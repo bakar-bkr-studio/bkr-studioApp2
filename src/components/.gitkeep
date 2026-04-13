@@ -1,0 +1,3 @@
+// Ce dossier contiendra les composants UI réutilisables.
+// Exemples à venir : Button, Card, Badge, Modal...
+// Chaque composant = un fichier : Button.tsx, Card.tsx, etc.

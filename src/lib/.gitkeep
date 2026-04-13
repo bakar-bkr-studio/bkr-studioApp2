@@ -1,0 +1,5 @@
+// Ce dossier contiendra les utilitaires partagés.
+// Exemples à venir :
+//   lib/firebase.ts     — configuration Firebase (plus tard)
+//   lib/formatters.ts   — formatage des dates, montants...
+//   lib/utils.ts        — fonctions utilitaires génériques
