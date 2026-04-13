@@ -1,11 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { deleteUser } from "firebase/auth";
+import { useRouter } from "next/navigation";
 import PageHeader from "@/components/PageHeader";
+import DeleteAccountModal from "@/components/settings/DeleteAccountModal";
 import SettingsItem from "@/components/settings/SettingsItem";
 import SettingsSectionCard from "@/components/settings/SettingsSectionCard";
 import SettingsStatusBadge from "@/components/settings/SettingsStatusBadge";
 import SettingsToggle from "@/components/settings/SettingsToggle";
+import { deleteCurrentUserAccountData } from "@/features/account/api/account";
+import { useAuth } from "@/lib/auth/use-auth";
+import { getFirebaseAuth } from "@/lib/firebase";
 import { loadSettings, saveSettings } from "@/lib/local-storage";
 import { getSettingsSections } from "@/lib/settings-utils";
 import type {
@@ -68,9 +74,62 @@ function formatUpdatedAt(isoDate: string): string {
   });
 }
 
+function getErrorCode(error: unknown): string | null {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+
+  return null;
+}
+
+function getDeleteAccountErrorMessage(error: unknown): string {
+  const code = getErrorCode(error);
+
+  switch (code) {
+    case "auth/requires-recent-login":
+      return "Pour supprimer votre compte, reconnectez-vous puis réessayez. Firebase exige une authentification récente.";
+    case "auth/unauthorized":
+    case "auth/invalid-user-token":
+    case "auth/user-token-expired":
+    case "auth/user-not-found":
+      return "Session expirée ou invalide. Reconnectez-vous puis réessayez.";
+    case "firestore/admin-not-configured":
+      return "La suppression est temporairement indisponible côté serveur. Réessayez plus tard.";
+    case "rate-limit/exceeded":
+      return "Trop de tentatives. Réessayez dans quelques instants.";
+    default:
+      return "Impossible de supprimer le compte pour le moment. Veuillez réessayer.";
+  }
+}
+
+async function clearServerSessionFallback() {
+  await fetch("/api/auth/logout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({}),
+  });
+}
+
+function logSettingsError(context: string, error: unknown) {
+  if (process.env.NODE_ENV !== "production") {
+    console.error(`[Settings] ${context}`, error);
+  }
+}
+
 export default function SettingsPageClient({ initialSettings }: SettingsPageClientProps) {
+  const router = useRouter();
+  const { user, isAuthAvailable, logout } = useAuth();
   const [settings, setSettings] = useState<AppSettings>(initialSettings);
   const [isStorageReady, setIsStorageReady] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState("");
 
   useEffect(() => {
     setSettings(loadSettings(initialSettings));
@@ -99,6 +158,55 @@ export default function SettingsPageClient({ initialSettings }: SettingsPageClie
         updatedAt: new Date().toISOString(),
       };
     });
+  }
+
+  async function handleConfirmDeleteAccount() {
+    if (isDeletingAccount) {
+      return;
+    }
+
+    if (!user?.id) {
+      setDeleteAccountError("Aucun utilisateur connecté. Reconnectez-vous puis réessayez.");
+      return;
+    }
+
+    const auth = getFirebaseAuth();
+    const currentUser = auth?.currentUser;
+
+    if (!auth || !currentUser || currentUser.uid !== user.id) {
+      setDeleteAccountError("Session Firebase invalide. Reconnectez-vous puis réessayez.");
+      return;
+    }
+
+    setDeleteAccountError("");
+    setIsDeletingAccount(true);
+
+    try {
+      await deleteCurrentUserAccountData();
+      await deleteUser(currentUser);
+
+      try {
+        await logout();
+      } catch (logoutError) {
+        logSettingsError("Échec du logout standard après suppression de compte.", logoutError);
+
+        try {
+          await clearServerSessionFallback();
+        } catch (fallbackError) {
+          logSettingsError(
+            "Échec du fallback de suppression de session serveur après suppression de compte.",
+            fallbackError
+          );
+        }
+      }
+
+      router.replace("/");
+    } catch (error) {
+      logSettingsError("Échec de suppression du compte utilisateur.", error);
+      setDeleteAccountError(getDeleteAccountErrorMessage(error));
+    } finally {
+      setIsDeletingAccount(false);
+    }
   }
 
   return (
@@ -275,6 +383,55 @@ export default function SettingsPageClient({ initialSettings }: SettingsPageClie
           </p>
         </SettingsSectionCard>
       </div>
+
+      <section className="settings-danger-zone" aria-label="Zone dangereuse">
+        <header className="settings-danger-zone__header">
+          <h2 className="settings-danger-zone__title">Zone dangereuse</h2>
+          <p className="settings-danger-zone__description">
+            La suppression du compte est définitive. Toutes vos données Firestore et votre
+            compte Firebase Authentication seront supprimés.
+          </p>
+        </header>
+
+        <div className="settings-danger-zone__body">
+          <p className="settings-danger-zone__warning">
+            Cette action est irréversible et ne peut pas être annulée.
+          </p>
+
+          {!isAuthAvailable && (
+            <div className="modal-error" role="alert">
+              Firebase Authentication n&apos;est pas disponible dans cet environnement.
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="btn btn--danger"
+            onClick={() => {
+              setDeleteAccountError("");
+              setIsDeleteModalOpen(true);
+            }}
+            disabled={!isAuthAvailable || !user?.id || isDeletingAccount}
+          >
+            Supprimer mon compte
+          </button>
+        </div>
+      </section>
+
+      <DeleteAccountModal
+        isOpen={isDeleteModalOpen}
+        isLoading={isDeletingAccount}
+        errorMessage={deleteAccountError}
+        onClose={() => {
+          if (isDeletingAccount) {
+            return;
+          }
+
+          setDeleteAccountError("");
+          setIsDeleteModalOpen(false);
+        }}
+        onConfirm={handleConfirmDeleteAccount}
+      />
     </>
   );
 }

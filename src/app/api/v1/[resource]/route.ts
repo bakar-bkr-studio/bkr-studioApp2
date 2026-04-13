@@ -12,10 +12,30 @@ import {
 } from "@/lib/server/resource-schemas";
 import { jsonError, jsonSuccess } from "@/lib/server/response";
 import { isOriginAllowed, isRateLimited } from "@/lib/server/http-security";
-import { ValidationError } from "@/lib/server/errors";
+import { ValidationError, getErrorCode } from "@/lib/server/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function toResponseStatus(code: string): number {
+  if (code === "auth/unauthorized") {
+    return 401;
+  }
+
+  if (code === "auth/forbidden") {
+    return 403;
+  }
+
+  if (code === "firestore/admin-not-configured") {
+    return 503;
+  }
+
+  if (code.startsWith("validation/")) {
+    return 400;
+  }
+
+  return 500;
+}
 
 function parseResource(resource: string): ResourceName | null {
   return RESOURCE_NAMES.includes(resource as ResourceName)
@@ -85,15 +105,14 @@ export async function GET(
 
     return withCorsHeaders(request, jsonSuccess({ items }, 200));
   } catch (error) {
-    if (error instanceof ValidationError) {
-      return jsonError(error.message, 400, error.code);
-    }
+    const code = getErrorCode(error, "resource/list-failed");
+    const status = error instanceof ValidationError ? toResponseStatus(error.code) : toResponseStatus(code);
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "Impossible de charger les données.";
 
-    return jsonError(
-      "Impossible de charger les données.",
-      500,
-      "resource/list-failed"
-    );
+    return jsonError(message, status, code);
   }
 }
 
@@ -155,14 +174,13 @@ export async function POST(
     const item = mapResourceRecord(resource, createdSnapshot.id, createdSnapshot.data() ?? {});
     return withCorsHeaders(request, jsonSuccess({ item }, 201));
   } catch (error) {
-    if (error instanceof ValidationError) {
-      return jsonError(error.message, 400, error.code);
-    }
+    const code = getErrorCode(error, "resource/create-failed");
+    const status = error instanceof ValidationError ? toResponseStatus(error.code) : toResponseStatus(code);
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "Impossible de créer la ressource.";
 
-    return jsonError(
-      "Impossible de créer la ressource.",
-      500,
-      "resource/create-failed"
-    );
+    return jsonError(message, status, code);
   }
 }

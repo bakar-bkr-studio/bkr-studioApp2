@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_SESSION_COOKIE_NAME } from "@/lib/auth/session-constants";
 
 const PRIVATE_ROUTE_PREFIXES = [
+  "/onboarding",
   "/dashboard",
   "/contacts",
   "/projects",

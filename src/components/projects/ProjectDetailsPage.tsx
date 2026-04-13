@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import EmptyState from "@/components/EmptyState";
-import ProjectModal, { type ProjectFormData } from "@/components/projects/ProjectModal";
+import ProjectModal, {
+  type ProjectFormData,
+  type ProjectTaskDraftData,
+} from "@/components/projects/ProjectModal";
 import { listUserContacts } from "@/features/contacts/api/contacts";
 import type { Contact } from "@/features/contacts/types";
 import {
@@ -13,8 +16,13 @@ import {
   updateProject,
 } from "@/features/projects/api/projects";
 import type { Project } from "@/features/projects/types";
-import { listUserTasks } from "@/features/tasks/api/tasks";
-import type { Task } from "@/features/tasks/types";
+import {
+  createTask,
+  deleteTask,
+  listUserTasks,
+  updateTask,
+} from "@/features/tasks/api/tasks";
+import type { Task, UpsertTaskInput } from "@/features/tasks/types";
 import { useAuth } from "@/lib/auth/use-auth";
 
 interface ProjectDetailsPageProps {
@@ -58,6 +66,25 @@ function formatDate(value?: string | null) {
   });
 }
 
+function toDateTime(value: string) {
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function toProjectTaskPayload(
+  draft: ProjectTaskDraftData,
+  projectId: string
+): UpsertTaskInput {
+  return {
+    title: draft.title.trim(),
+    description: draft.description.trim() || null,
+    status: draft.status,
+    priority: draft.priority,
+    dueDate: draft.dueDate || null,
+    projectId,
+  };
+}
+
 function logProjectDetailsError(context: string, error: unknown) {
   if (process.env.NODE_ENV !== "production") {
     console.error(`[ProjectDetails] ${context}`, error);
@@ -74,6 +101,8 @@ export default function ProjectDetailsPage({ projectId }: ProjectDetailsPageProp
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isProjectTaskSaving, setIsProjectTaskSaving] = useState(false);
+  const [isRefreshingTasks, setIsRefreshingTasks] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
@@ -139,10 +168,32 @@ export default function ProjectDetailsPage({ projectId }: ProjectDetailsPageProp
     return contacts.find((item) => item.id === project.contactId) ?? null;
   }, [contacts, project?.contactId]);
 
-  const linkedTasks = useMemo(
-    () => tasks.filter((task) => task.projectId === projectId),
-    [tasks, projectId]
-  );
+  const linkedTasks = useMemo(() => {
+    if (!project) {
+      return [];
+    }
+
+    return [...tasks]
+      .filter((task) => task.projectId === project.id)
+      .sort((a, b) => toDateTime(b.createdAt) - toDateTime(a.createdAt));
+  }, [project, tasks]);
+
+  const refreshTasksFromFirestore = async () => {
+    if (!user?.id) {
+      return;
+    }
+
+    setIsRefreshingTasks(true);
+    try {
+      const loadedTasks = await listUserTasks();
+      setTasks(loadedTasks);
+    } catch (error) {
+      logProjectDetailsError("Échec du rechargement des tâches liées.", error);
+      setErrorMessage("Impossible de recharger les tâches liées au projet.");
+    } finally {
+      setIsRefreshingTasks(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -230,6 +281,68 @@ export default function ProjectDetailsPage({ projectId }: ProjectDetailsPageProp
     })();
   };
 
+  const handleOpenEditModal = () => {
+    setIsEditModalOpen(true);
+    void refreshTasksFromFirestore();
+  };
+
+  const handleCreateProjectTask = async (taskDraft: ProjectTaskDraftData) => {
+    if (!user?.id || !project || isProjectTaskSaving) {
+      return;
+    }
+
+    setIsProjectTaskSaving(true);
+    setErrorMessage("");
+    try {
+      const createdTask = await createTask(toProjectTaskPayload(taskDraft, project.id));
+      setTasks((prev) => [createdTask, ...prev]);
+    } catch (error) {
+      logProjectDetailsError("Échec d'ajout d'une tâche liée au projet.", error);
+      setErrorMessage("Impossible d'ajouter la tâche au projet.");
+      throw error;
+    } finally {
+      setIsProjectTaskSaving(false);
+    }
+  };
+
+  const handleUpdateProjectTask = async (taskId: string, taskDraft: ProjectTaskDraftData) => {
+    if (!user?.id || !project || isProjectTaskSaving) {
+      return;
+    }
+
+    setIsProjectTaskSaving(true);
+    setErrorMessage("");
+    try {
+      const updatedTask = await updateTask(taskId, toProjectTaskPayload(taskDraft, project.id));
+      setTasks((prev) => prev.map((task) => (task.id === updatedTask.id ? updatedTask : task)));
+    } catch (error) {
+      logProjectDetailsError("Échec de modification d'une tâche liée au projet.", error);
+      setErrorMessage("Impossible de modifier la tâche du projet.");
+      throw error;
+    } finally {
+      setIsProjectTaskSaving(false);
+    }
+  };
+
+  const handleDeleteProjectTask = async (taskId: string) => {
+    if (!user?.id || isProjectTaskSaving) {
+      return;
+    }
+
+    setIsProjectTaskSaving(true);
+    setErrorMessage("");
+    try {
+      await deleteTask(taskId);
+      setTasks((prev) => prev.filter((task) => task.id !== taskId));
+    } catch (error) {
+      logProjectDetailsError("Échec de suppression d'une tâche liée au projet.", error);
+      setErrorMessage("Impossible de supprimer la tâche du projet.");
+      throw error;
+    } finally {
+      setIsProjectTaskSaving(false);
+    }
+  };
+
   return (
     <>
       <div className="page-header">
@@ -241,7 +354,7 @@ export default function ProjectDetailsPage({ projectId }: ProjectDetailsPageProp
           <p className="page-desc">Aperçu complet du projet et actions rapides.</p>
         </div>
         <div className="project-details__actions">
-          <button className="btn btn--ghost" onClick={() => setIsEditModalOpen(true)} disabled={isSaving}>
+          <button className="btn btn--ghost" onClick={handleOpenEditModal} disabled={isSaving}>
             Modifier
           </button>
           <button className="btn btn--danger" onClick={handleDeleteProject} disabled={isSaving}>
@@ -360,9 +473,66 @@ export default function ProjectDetailsPage({ projectId }: ProjectDetailsPageProp
         </section>
       </div>
 
+      <section className="card" style={{ marginTop: "18px" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "12px",
+            marginBottom: "12px",
+          }}
+        >
+          <h2 className="project-details__section-title" style={{ margin: 0 }}>
+            Tâches liées
+          </h2>
+          <Link href="/tasks" className="btn btn--ghost">
+            Ouvrir les tâches
+          </Link>
+        </div>
+
+        {isRefreshingTasks && (
+          <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
+            Actualisation des tâches...
+          </p>
+        )}
+
+        {linkedTasks.length === 0 ? (
+          <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>
+            Aucune tâche liée à ce projet pour le moment.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {linkedTasks.map((task) => (
+              <div
+                key={task.id}
+                style={{
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-sm)",
+                  padding: "10px 12px",
+                  background: "var(--bg-elevated)",
+                }}
+              >
+                <p style={{ fontWeight: 600, fontSize: "14px", marginBottom: "4px" }}>{task.title}</p>
+                <p style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  {task.status} · {task.priority}
+                  {task.dueDate ? ` · Échéance: ${formatDate(task.dueDate)}` : ""}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       <ProjectModal
         isOpen={isEditModalOpen}
         projectToEdit={project}
+        projectTasks={linkedTasks}
+        isProjectTasksLoading={isRefreshingTasks}
+        isProjectTaskSaving={isProjectTaskSaving}
+        onCreateProjectTask={handleCreateProjectTask}
+        onUpdateProjectTask={handleUpdateProjectTask}
+        onDeleteProjectTask={handleDeleteProjectTask}
         contacts={contacts}
         onClose={() => setIsEditModalOpen(false)}
         onSubmit={handleSubmitEdit}

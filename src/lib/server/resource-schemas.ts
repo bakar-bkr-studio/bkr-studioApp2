@@ -177,6 +177,14 @@ function toNullableNumber(value: unknown, field: string): number | null {
   return value;
 }
 
+function toRequiredBoolean(value: unknown, field: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new ValidationError(`Le champ "${field}" doit être un booléen.`);
+  }
+
+  return value;
+}
+
 function toEnumValue<T extends string>(
   value: unknown,
   field: string,
@@ -762,6 +770,7 @@ export interface UserProfilePatch {
   firstName?: string;
   lastName?: string;
   displayName?: string;
+  onboardingCompleted?: boolean;
   businessName?: NullableText;
   role?: NullableText;
   specialty?: NullableText;
@@ -782,6 +791,7 @@ export function sanitizeProfilePatch(payload: unknown): UserProfilePatch {
     "firstName",
     "lastName",
     "displayName",
+    "onboardingCompleted",
     "businessName",
     "role",
     "specialty",
@@ -800,6 +810,9 @@ export function sanitizeProfilePatch(payload: unknown): UserProfilePatch {
   if (hasOwn(data, "firstName")) patch.firstName = toRequiredString(data.firstName, "firstName", 120);
   if (hasOwn(data, "lastName")) patch.lastName = toRequiredString(data.lastName, "lastName", 120);
   if (hasOwn(data, "displayName")) patch.displayName = toRequiredString(data.displayName, "displayName", 160);
+  if (hasOwn(data, "onboardingCompleted")) {
+    patch.onboardingCompleted = toRequiredBoolean(data.onboardingCompleted, "onboardingCompleted");
+  }
   if (hasOwn(data, "businessName")) patch.businessName = toNullableString(data.businessName, "businessName", 160);
   if (hasOwn(data, "role")) patch.role = toNullableString(data.role, "role", 160);
   if (hasOwn(data, "specialty")) patch.specialty = toNullableString(data.specialty, "specialty", 160);
@@ -828,6 +841,7 @@ export function buildDefaultUserProfile(uid: string, email: string | null): AnyR
     firstName: "",
     lastName: "",
     displayName,
+    onboardingCompleted: false,
     businessName: null,
     role: null,
     specialty: null,
@@ -851,6 +865,7 @@ export function mapUserProfile(id: string, rawData: AnyRecord): UserProfile {
     firstName: typeof rawData.firstName === "string" ? rawData.firstName : "",
     lastName: typeof rawData.lastName === "string" ? rawData.lastName : "",
     displayName: typeof rawData.displayName === "string" ? rawData.displayName : id,
+    onboardingCompleted: rawData.onboardingCompleted === true,
     businessName: safeNullableString(rawData.businessName) ?? undefined,
     role: safeNullableString(rawData.role) ?? undefined,
     specialty: safeNullableString(rawData.specialty) ?? undefined,

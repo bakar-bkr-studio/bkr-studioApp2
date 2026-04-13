@@ -66,6 +66,10 @@ async function getOwnedDocRef(
 }
 
 function toResponseStatus(code: string) {
+  if (code === "auth/unauthorized") {
+    return 401;
+  }
+
   if (code === "resource/not-found") {
     return 404;
   }

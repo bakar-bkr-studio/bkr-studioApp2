@@ -5,12 +5,12 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/use-auth";
-import { AUTHENTICATED_HOME_ROUTE } from "@/lib/auth/route-access";
+import { AUTHENTICATED_HOME_ROUTE, VERIFY_EMAIL_ROUTE } from "@/lib/auth/route-access";
 import { getAuthErrorMessage } from "@/lib/auth/auth-errors";
 
 export default function SignupPage() {
   const router = useRouter();
-  const { isReady, isAuthenticated, signup, isAuthAvailable } = useAuth();
+  const { isReady, isAuthenticated, isEmailVerified, signup, isAuthAvailable } = useAuth();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -26,9 +26,10 @@ export default function SignupPage() {
 
   useEffect(() => {
     if (isReady && isAuthenticated) {
-      router.replace(AUTHENTICATED_HOME_ROUTE);
+      const destination = isEmailVerified ? AUTHENTICATED_HOME_ROUTE : VERIFY_EMAIL_ROUTE;
+      router.replace(destination);
     }
-  }, [isAuthenticated, isReady, router]);
+  }, [isAuthenticated, isEmailVerified, isReady, router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,7 +51,7 @@ export default function SignupPage() {
 
     try {
       await signup(email.trim(), password);
-      router.replace(AUTHENTICATED_HOME_ROUTE);
+      router.replace(VERIFY_EMAIL_ROUTE);
     } catch (error) {
       setSubmitError(getAuthErrorMessage(error, "signup"));
     } finally {
@@ -69,7 +70,7 @@ export default function SignupPage() {
   if (isAuthenticated) {
     return (
       <p className="mx-auto w-full max-w-5xl text-sm text-[var(--text-secondary)]">
-        Redirection vers votre dashboard...
+        Redirection vers {isEmailVerified ? "votre dashboard" : "la vérification de votre email"}...
       </p>
     );
   }

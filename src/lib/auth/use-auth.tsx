@@ -12,25 +12,36 @@ import {
 import {
   createUserWithEmailAndPassword,
   onIdTokenChanged,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
   type User,
 } from "firebase/auth";
+import {
+  getEmailVerificationActionCodeSettings,
+  getPasswordResetActionCodeSettings,
+} from "@/lib/auth/action-code-settings";
 import { getFirebaseAuth } from "@/lib/firebase";
 
 export interface AuthUser {
   id: string;
   email?: string;
+  emailVerified: boolean;
 }
 
 interface AuthContextValue {
   isReady: boolean;
   isAuthenticated: boolean;
+  isEmailVerified: boolean;
   isAuthAvailable: boolean;
   user: AuthUser | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
+  sendVerificationEmail: () => Promise<void>;
+  refreshUser: () => Promise<AuthUser | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -43,6 +54,7 @@ function mapAuthUser(user: User | null): AuthUser | null {
   return {
     id: user.uid,
     email: user.email ?? undefined,
+    emailVerified: user.emailVerified,
   };
 }
 
@@ -51,6 +63,12 @@ function createAuthNotConfiguredError() {
     "Firebase Authentication n'est pas configuré. Vérifiez les variables NEXT_PUBLIC_FIREBASE_*."
   ) as Error & { code?: string };
   error.code = "auth/not-configured";
+  return error;
+}
+
+function createNoCurrentUserError() {
+  const error = new Error("Aucune session utilisateur active.") as Error & { code?: string };
+  error.code = "auth/no-current-user";
   return error;
 }
 
@@ -112,7 +130,7 @@ async function clearServerSession(idToken?: string) {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const auth = useMemo(() => getFirebaseAuth(), []);
-  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isReady, setIsReady] = useState(false);
   const hasResolvedInitialAuthRef = useRef(false);
   const lastSyncedTokenRef = useRef<string | null>(null);
@@ -159,7 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
 
           try {
-            setFirebaseUser(nextUser);
+            setAuthUser(mapAuthUser(nextUser));
 
             if (nextUser) {
               void (async () => {
@@ -184,7 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } catch (error) {
             logAuthError("Erreur pendant la mise à jour de l'état utilisateur.", error);
-            setFirebaseUser(null);
+            setAuthUser(null);
           } finally {
             clearTimeout(fallbackTimeout);
             markAuthReady();
@@ -196,14 +214,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
 
           logAuthError("Erreur dans onIdTokenChanged.", error);
-          setFirebaseUser(null);
+          setAuthUser(null);
           clearTimeout(fallbackTimeout);
           markAuthReady();
         }
       );
     } catch (error) {
       logAuthError("Échec d'initialisation du listener onIdTokenChanged.", error);
-      setFirebaseUser(null);
+      setAuthUser(null);
       clearTimeout(fallbackTimeout);
       markAuthReady();
     }
@@ -239,9 +257,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const idToken = await credentials.user.getIdToken();
       await syncServerSessionFromIdToken(idToken);
       lastSyncedTokenRef.current = idToken;
+
+      try {
+        const actionCodeSettings = getEmailVerificationActionCodeSettings();
+        await sendEmailVerification(credentials.user, actionCodeSettings);
+      } catch (error) {
+        logAuthError("Impossible d'envoyer automatiquement l'email de vérification.", error);
+      }
     },
     [auth]
   );
+
+  const sendPasswordReset = useCallback(
+    async (email: string) => {
+      if (!auth) {
+        throw createAuthNotConfiguredError();
+      }
+
+      const actionCodeSettings = getPasswordResetActionCodeSettings();
+      await sendPasswordResetEmail(auth, email, actionCodeSettings);
+    },
+    [auth]
+  );
+
+  const sendVerificationEmail = useCallback(async () => {
+    if (!auth) {
+      throw createAuthNotConfiguredError();
+    }
+
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      throw createNoCurrentUserError();
+    }
+
+    const actionCodeSettings = getEmailVerificationActionCodeSettings();
+    await sendEmailVerification(currentUser, actionCodeSettings);
+  }, [auth]);
+
+  const refreshUser = useCallback(async (): Promise<AuthUser | null> => {
+    if (!auth) {
+      throw createAuthNotConfiguredError();
+    }
+
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      setAuthUser(null);
+      lastSyncedTokenRef.current = null;
+      return null;
+    }
+
+    await currentUser.reload();
+
+    const refreshedUser = auth.currentUser;
+
+    if (!refreshedUser) {
+      setAuthUser(null);
+      lastSyncedTokenRef.current = null;
+      await clearServerSession();
+      return null;
+    }
+
+    const idToken = await refreshedUser.getIdToken(true);
+    await syncServerSessionFromIdToken(idToken);
+    lastSyncedTokenRef.current = idToken;
+
+    const mappedUser = mapAuthUser(refreshedUser);
+    setAuthUser(mappedUser);
+    return mappedUser;
+  }, [auth]);
 
   const logout = useCallback(async () => {
     if (!auth) {
@@ -263,22 +348,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     await clearServerSession(idToken);
     await signOut(auth);
+    setAuthUser(null);
     lastSyncedTokenRef.current = null;
   }, [auth]);
-
-  const user = useMemo(() => mapAuthUser(firebaseUser), [firebaseUser]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       isReady,
-      isAuthenticated: Boolean(firebaseUser),
+      isAuthenticated: Boolean(authUser),
+      isEmailVerified: Boolean(authUser?.emailVerified),
       isAuthAvailable: Boolean(auth),
-      user,
+      user: authUser,
       login,
       signup,
       logout,
+      sendPasswordReset,
+      sendVerificationEmail,
+      refreshUser,
     }),
-    [auth, firebaseUser, isReady, login, logout, signup, user]
+    [
+      auth,
+      authUser,
+      isReady,
+      login,
+      logout,
+      refreshUser,
+      sendPasswordReset,
+      sendVerificationEmail,
+      signup,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

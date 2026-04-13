@@ -34,6 +34,7 @@ export const mockUserProfile: UserProfile = {
   firstName: "Aboubakar",
   lastName: "Sacko",
   displayName: "Aboubakar Sacko",
+  onboardingCompleted: true,
   businessName: "BKR Studio",
   role: "Photographe / Vidéaste",
   specialty: "Contenu sportif et storytelling visuel pour clubs et marques",

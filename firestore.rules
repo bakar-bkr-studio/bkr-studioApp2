@@ -241,6 +241,7 @@ service cloud.firestore {
         "firstName",
         "lastName",
         "displayName",
+        "onboardingCompleted",
         "businessName",
         "role",
         "specialty",
@@ -262,6 +263,7 @@ service cloud.firestore {
         data.firstName is string &&
         data.lastName is string &&
         data.displayName is string &&
+        data.onboardingCompleted is bool &&
         isNullableString(data.businessName) &&
         isNullableString(data.role) &&
         isNullableString(data.specialty) &&

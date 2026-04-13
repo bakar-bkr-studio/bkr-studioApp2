@@ -22,18 +22,24 @@ function buildInitialTaskPayloads(
   drafts: ProjectTaskDraftData[],
   projectId: string
 ): UpsertTaskInput[] {
-  return drafts.map((draft) => {
-    const taskPayload: UpsertTaskInput = {
-      title: draft.title.trim(),
+  return drafts.reduce<UpsertTaskInput[]>((payloads, draft) => {
+    const title = draft.title.trim();
+
+    if (!title) {
+      return payloads;
+    }
+
+    payloads.push({
+      title,
       description: draft.description.trim() || null,
       status: draft.status,
       priority: draft.priority,
       dueDate: draft.dueDate || null,
       projectId,
-    };
+    });
 
-    return taskPayload;
-  });
+    return payloads;
+  }, []);
 }
 
 function toDateTime(value: string): number {
@@ -187,19 +193,22 @@ export default function ProjectsPage() {
 
         if (initialTasks?.length) {
           const taskPayloads = buildInitialTaskPayloads(initialTasks, createdProject.id);
-          const taskCreations = await Promise.allSettled(
-            taskPayloads.map((taskPayload) => createTask(taskPayload))
-          );
-          const hasTaskCreationError = taskCreations.some(
-            (result) => result.status === "rejected"
-          );
-
-          if (hasTaskCreationError) {
-            logProjectsError(
-              "Certaines tâches initiales du projet n'ont pas pu être créées.",
-              taskCreations
+          if (taskPayloads.length > 0) {
+            // userId/createdAt/updatedAt sont ajoutés côté API Firestore.
+            const taskCreations = await Promise.allSettled(
+              taskPayloads.map((taskPayload) => createTask(taskPayload))
             );
-            setErrorMessage("Projet créé, mais certaines tâches initiales n'ont pas pu être enregistrées.");
+            const hasTaskCreationError = taskCreations.some(
+              (result) => result.status === "rejected"
+            );
+
+            if (hasTaskCreationError) {
+              logProjectsError(
+                "Certaines tâches initiales du projet n'ont pas pu être créées.",
+                taskCreations
+              );
+              setErrorMessage("Projet créé, mais certaines tâches initiales n'ont pas pu être enregistrées.");
+            }
           }
         }
 

@@ -17,6 +17,7 @@ export type UpdateUserProfileInput = Partial<
     | "firstName"
     | "lastName"
     | "displayName"
+    | "onboardingCompleted"
     | "businessName"
     | "role"
     | "specialty"
@@ -105,6 +106,7 @@ function normalizeUsefulLinks(value: unknown): DashboardUsefulLink[] {
 function normalizeUserProfile(profile: UserProfile): UserProfile {
   return {
     ...profile,
+    onboardingCompleted: profile.onboardingCompleted === true,
     currency: normalizeCurrency(profile.currency),
     accountStatus: normalizeAccountStatus(profile.accountStatus),
     usefulLinks: normalizeUsefulLinks(profile.usefulLinks),

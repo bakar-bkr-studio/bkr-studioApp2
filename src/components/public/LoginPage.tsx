@@ -5,13 +5,13 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth/use-auth";
-import { AUTHENTICATED_HOME_ROUTE } from "@/lib/auth/route-access";
+import { AUTHENTICATED_HOME_ROUTE, FORGOT_PASSWORD_ROUTE, VERIFY_EMAIL_ROUTE } from "@/lib/auth/route-access";
 import { getAuthErrorMessage } from "@/lib/auth/auth-errors";
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isReady, isAuthenticated, login, isAuthAvailable } = useAuth();
+  const { isReady, isAuthenticated, isEmailVerified, login, isAuthAvailable } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const nextPathFromQuery = searchParams.get("next");
@@ -22,9 +22,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (isReady && isAuthenticated) {
-      router.replace(nextPath);
+      const destination = isEmailVerified ? nextPath : VERIFY_EMAIL_ROUTE;
+      router.replace(destination);
     }
-  }, [isAuthenticated, isReady, nextPath, router]);
+  }, [isAuthenticated, isEmailVerified, isReady, nextPath, router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,7 +43,6 @@ export default function LoginPage() {
 
     try {
       await login(email.trim(), password);
-      router.replace(nextPath);
     } catch (error) {
       setSubmitError(getAuthErrorMessage(error, "login"));
     } finally {
@@ -61,7 +61,7 @@ export default function LoginPage() {
   if (isAuthenticated) {
     return (
       <p className="mx-auto w-full max-w-5xl text-sm text-[var(--text-secondary)]">
-        Redirection vers votre dashboard...
+        Redirection vers {isEmailVerified ? "votre dashboard" : "la vérification de votre email"}...
       </p>
     );
   }
@@ -122,13 +122,12 @@ export default function LoginPage() {
             </div>
 
             <div className="flex items-center justify-between gap-3">
-              <a
-                href="#"
-                onClick={(event) => event.preventDefault()}
+              <Link
+                href={FORGOT_PASSWORD_ROUTE}
                 className="text-sm text-[var(--text-secondary)] underline decoration-[var(--border-light)] underline-offset-4 transition hover:text-[var(--text-primary)]"
               >
-                Mot de passe oublié
-              </a>
+                Mot de passe oublié ?
+              </Link>
 
               <button
                 type="submit"
@@ -145,9 +144,6 @@ export default function LoginPage() {
               </p>
             )}
 
-            <p className="text-xs text-[var(--text-muted)]">
-              Réinitialisation du mot de passe bientôt disponible.
-            </p>
           </form>
 
           <p className="mt-6 text-sm text-[var(--text-secondary)]">

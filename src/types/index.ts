@@ -41,6 +41,7 @@ export interface UserProfile {
   firstName: string;
   lastName: string;
   displayName: string;
+  onboardingCompleted: boolean;
   businessName?: string;
   role?: string;
   specialty?: string;

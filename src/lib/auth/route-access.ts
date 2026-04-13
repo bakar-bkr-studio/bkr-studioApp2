@@ -1,8 +1,13 @@
-export const PUBLIC_ROUTES = ["/", "/login", "/signup"] as const;
+export const FORGOT_PASSWORD_ROUTE = "/forgot-password";
+export const VERIFY_EMAIL_ROUTE = "/verify-email";
+export const ONBOARDING_ROUTE = "/onboarding";
+
+export const PUBLIC_ROUTES = ["/", "/login", "/signup", FORGOT_PASSWORD_ROUTE, VERIFY_EMAIL_ROUTE] as const;
 
 export const AUTH_ROUTES = ["/login", "/signup"] as const;
 
 export const PRIVATE_ROUTE_PREFIXES = [
+  ONBOARDING_ROUTE,
   "/dashboard",
   "/contacts",
   "/projects",

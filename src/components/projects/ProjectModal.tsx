@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Contact } from "@/features/contacts/types";
 import type { Project, ProjectStatus, UpsertProjectInput } from "@/features/projects/types";
-import type { TaskPriority, TaskStatus } from "@/features/tasks/types";
+import type { Task, TaskPriority, TaskStatus } from "@/features/tasks/types";
 
 // -------------------------------------------------------
 // Types
@@ -49,6 +49,12 @@ const defaultFormState: ProjectFormState = {
 interface ProjectModalProps {
   isOpen: boolean;
   projectToEdit?: Project | null;
+  projectTasks?: Task[];
+  isProjectTasksLoading?: boolean;
+  isProjectTaskSaving?: boolean;
+  onCreateProjectTask?: (task: ProjectTaskDraftData) => Promise<void> | void;
+  onUpdateProjectTask?: (taskId: string, task: ProjectTaskDraftData) => Promise<void> | void;
+  onDeleteProjectTask?: (taskId: string) => Promise<void> | void;
   contacts: Contact[];
   onClose: () => void;
   onSubmit: (data: ProjectFormData) => void;
@@ -68,6 +74,12 @@ const defaultTaskDraft: ProjectTaskDraftData = {
 export default function ProjectModal({
   isOpen,
   projectToEdit,
+  projectTasks = [],
+  isProjectTasksLoading = false,
+  isProjectTaskSaving = false,
+  onCreateProjectTask,
+  onUpdateProjectTask,
+  onDeleteProjectTask,
   contacts,
   onClose,
   onSubmit,
@@ -75,6 +87,10 @@ export default function ProjectModal({
   const [form, setForm] = useState<ProjectFormState>(defaultFormState);
   const [initialTasks, setInitialTasks] = useState<ProjectTaskDraftData[]>([]);
   const [taskDraft, setTaskDraft] = useState<ProjectTaskDraftData>(defaultTaskDraft);
+  const [projectTaskDraft, setProjectTaskDraft] = useState<ProjectTaskDraftData>(defaultTaskDraft);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskDraft, setEditingTaskDraft] = useState<ProjectTaskDraftData>(defaultTaskDraft);
+  const [projectTaskError, setProjectTaskError] = useState("");
   const [error, setError] = useState("");
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
@@ -98,12 +114,19 @@ export default function ProjectModal({
         });
         setInitialTasks([]);
         setTaskDraft(defaultTaskDraft);
+        setProjectTaskDraft(defaultTaskDraft);
+        setEditingTaskId(null);
+        setEditingTaskDraft(defaultTaskDraft);
       } else {
         setForm(defaultFormState);
         setInitialTasks([]);
         setTaskDraft(defaultTaskDraft);
+        setProjectTaskDraft(defaultTaskDraft);
+        setEditingTaskId(null);
+        setEditingTaskDraft(defaultTaskDraft);
       }
       setError("");
+      setProjectTaskError("");
       setTimeout(() => firstFieldRef.current?.focus(), 50);
     }
   }, [isOpen, projectToEdit]);
@@ -169,6 +192,111 @@ export default function ProjectModal({
     setInitialTasks((prev) => prev.filter((_, index) => index !== indexToRemove));
   };
 
+  const handleProjectTaskDraftChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setProjectTaskDraft((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleEditingTaskDraftChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setEditingTaskDraft((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const startTaskEdition = (task: Task) => {
+    setEditingTaskId(task.id);
+    setEditingTaskDraft({
+      title: task.title,
+      description: task.description ?? "",
+      status: task.status,
+      priority: task.priority,
+      dueDate: task.dueDate ?? "",
+    });
+    setProjectTaskError("");
+  };
+
+  const handleCancelTaskEdition = () => {
+    setEditingTaskId(null);
+    setEditingTaskDraft(defaultTaskDraft);
+    setProjectTaskError("");
+  };
+
+  async function handleCreateLinkedTask() {
+    if (!onCreateProjectTask) {
+      return;
+    }
+
+    if (!projectTaskDraft.title.trim()) {
+      setProjectTaskError("Le titre d'une tâche est obligatoire.");
+      return;
+    }
+
+    try {
+      await onCreateProjectTask({
+        title: projectTaskDraft.title.trim(),
+        description: projectTaskDraft.description.trim(),
+        status: projectTaskDraft.status,
+        priority: projectTaskDraft.priority,
+        dueDate: projectTaskDraft.dueDate,
+      });
+      setProjectTaskDraft(defaultTaskDraft);
+      setProjectTaskError("");
+    } catch {
+      setProjectTaskError("Impossible d'ajouter la tâche au projet.");
+    }
+  }
+
+  async function handleSaveTaskEdition() {
+    if (!editingTaskId || !onUpdateProjectTask) {
+      return;
+    }
+
+    if (!editingTaskDraft.title.trim()) {
+      setProjectTaskError("Le titre d'une tâche est obligatoire.");
+      return;
+    }
+
+    try {
+      await onUpdateProjectTask(editingTaskId, {
+        title: editingTaskDraft.title.trim(),
+        description: editingTaskDraft.description.trim(),
+        status: editingTaskDraft.status,
+        priority: editingTaskDraft.priority,
+        dueDate: editingTaskDraft.dueDate,
+      });
+      setEditingTaskId(null);
+      setEditingTaskDraft(defaultTaskDraft);
+      setProjectTaskError("");
+    } catch {
+      setProjectTaskError("Impossible de modifier la tâche du projet.");
+    }
+  }
+
+  async function handleDeleteLinkedTask(taskId: string) {
+    if (!onDeleteProjectTask) {
+      return;
+    }
+
+    const confirmed = window.confirm("Supprimer cette tâche liée au projet ?");
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await onDeleteProjectTask(taskId);
+      if (editingTaskId === taskId) {
+        setEditingTaskId(null);
+        setEditingTaskDraft(defaultTaskDraft);
+      }
+      setProjectTaskError("");
+    } catch {
+      setProjectTaskError("Impossible de supprimer la tâche du projet.");
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -193,7 +321,19 @@ export default function ProjectModal({
     };
 
     if (!projectToEdit && initialTasks.length > 0) {
-      payload.initialTasks = initialTasks;
+      const normalizedInitialTasks = initialTasks
+        .map((task) => ({
+          title: task.title.trim(),
+          description: task.description.trim(),
+          status: task.status,
+          priority: task.priority,
+          dueDate: task.dueDate,
+        }))
+        .filter((task) => task.title.length > 0);
+
+      if (normalizedInitialTasks.length > 0) {
+        payload.initialTasks = normalizedInitialTasks;
+      }
     }
 
     onSubmit(payload);
@@ -392,146 +532,381 @@ export default function ProjectModal({
             />
           </div>
 
-          {!projectToEdit && (
-            <div
-              className="form-field"
-              style={{
-                borderTop: "1px solid var(--border)",
-                paddingTop: "16px",
-                marginTop: "16px",
-              }}
-            >
-              <label className="form-label">Tâches initiales (optionnel)</label>
+          <div
+            className="form-field"
+            style={{
+              borderTop: "1px solid var(--border)",
+              paddingTop: "16px",
+              marginTop: "16px",
+            }}
+          >
+            {!projectToEdit ? (
+              <>
+                <label className="form-label">Tâches initiales (optionnel)</label>
 
-              <div className="form-field">
-                <input
-                  name="title"
-                  type="text"
-                  className="form-input"
-                  placeholder="Titre de la tâche"
-                  value={taskDraft.title}
-                  onChange={handleTaskDraftChange}
-                />
-              </div>
-
-              <div className="form-field">
-                <textarea
-                  name="description"
-                  className="form-input form-textarea"
-                  placeholder="Description (optionnel)"
-                  rows={2}
-                  value={taskDraft.description}
-                  onChange={handleTaskDraftChange}
-                />
-              </div>
-
-              <div className="form-row">
                 <div className="form-field">
-                  <label className="form-label">Statut</label>
-                  <select
-                    name="status"
-                    className="form-input"
-                    value={taskDraft.status}
-                    onChange={handleTaskDraftChange}
-                  >
-                    <option value="todo">À faire</option>
-                    <option value="in_progress">En cours</option>
-                    <option value="done">Terminé</option>
-                  </select>
-                </div>
-                <div className="form-field">
-                  <label className="form-label">Priorité</label>
-                  <select
-                    name="priority"
-                    className="form-input"
-                    value={taskDraft.priority}
-                    onChange={handleTaskDraftChange}
-                  >
-                    <option value="low">Faible</option>
-                    <option value="medium">Moyenne</option>
-                    <option value="high">Urgente</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-field">
-                  <label className="form-label">Échéance</label>
                   <input
-                    name="dueDate"
-                    type="date"
+                    name="title"
+                    type="text"
                     className="form-input"
-                    value={taskDraft.dueDate}
+                    placeholder="Titre de la tâche"
+                    value={taskDraft.title}
                     onChange={handleTaskDraftChange}
                   />
                 </div>
-                <div
-                  className="form-field"
-                  style={{ display: "flex", alignItems: "flex-end" }}
-                >
-                  <button
-                    type="button"
-                    className="btn btn--ghost"
-                    onClick={handleAddInitialTask}
-                    style={{ width: "100%" }}
-                  >
-                    + Ajouter la tâche
-                  </button>
-                </div>
-              </div>
 
-              {initialTasks.length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  {initialTasks.map((task, index) => (
-                    <div
-                      key={`${task.title}-${index}`}
-                      style={{
-                        border: "1px solid var(--border)",
-                        borderRadius: "var(--radius-sm)",
-                        padding: "10px 12px",
-                        background: "var(--bg-elevated)",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: "10px",
-                      }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <p
-                          style={{
-                            fontSize: "13px",
-                            fontWeight: 600,
-                            color: "var(--text-primary)",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {task.title}
-                        </p>
-                        <p
-                          style={{
-                            fontSize: "11px",
-                            color: "var(--text-secondary)",
-                          }}
-                        >
-                          {task.status} · {task.priority}
-                          {task.dueDate ? ` · ${task.dueDate}` : ""}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn btn--ghost"
-                        onClick={() => handleRemoveInitialTask(index)}
-                      >
-                        Retirer
-                      </button>
-                    </div>
-                  ))}
+                <div className="form-field">
+                  <textarea
+                    name="description"
+                    className="form-input form-textarea"
+                    placeholder="Description (optionnel)"
+                    rows={2}
+                    value={taskDraft.description}
+                    onChange={handleTaskDraftChange}
+                  />
                 </div>
-              )}
-            </div>
-          )}
+
+                <div className="form-row">
+                  <div className="form-field">
+                    <label className="form-label">Statut</label>
+                    <select
+                      name="status"
+                      className="form-input"
+                      value={taskDraft.status}
+                      onChange={handleTaskDraftChange}
+                    >
+                      <option value="todo">À faire</option>
+                      <option value="in_progress">En cours</option>
+                      <option value="done">Terminé</option>
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">Priorité</label>
+                    <select
+                      name="priority"
+                      className="form-input"
+                      value={taskDraft.priority}
+                      onChange={handleTaskDraftChange}
+                    >
+                      <option value="low">Faible</option>
+                      <option value="medium">Moyenne</option>
+                      <option value="high">Urgente</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-field">
+                    <label className="form-label">Échéance</label>
+                    <input
+                      name="dueDate"
+                      type="date"
+                      className="form-input"
+                      value={taskDraft.dueDate}
+                      onChange={handleTaskDraftChange}
+                    />
+                  </div>
+                  <div
+                    className="form-field"
+                    style={{ display: "flex", alignItems: "flex-end" }}
+                  >
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={handleAddInitialTask}
+                      style={{ width: "100%" }}
+                    >
+                      + Ajouter la tâche
+                    </button>
+                  </div>
+                </div>
+
+                {initialTasks.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {initialTasks.map((task, index) => (
+                      <div
+                        key={`${task.title}-${index}`}
+                        style={{
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-sm)",
+                          padding: "10px 12px",
+                          background: "var(--bg-elevated)",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <p
+                            style={{
+                              fontSize: "13px",
+                              fontWeight: 600,
+                              color: "var(--text-primary)",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {task.title}
+                          </p>
+                          <p
+                            style={{
+                              fontSize: "11px",
+                              color: "var(--text-secondary)",
+                            }}
+                          >
+                            {task.status} · {task.priority}
+                            {task.dueDate ? ` · ${task.dueDate}` : ""}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn--ghost"
+                          onClick={() => handleRemoveInitialTask(index)}
+                        >
+                          Retirer
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <label className="form-label">Tâches liées au projet</label>
+                {projectTaskError && (
+                  <div className="modal-error" role="alert" style={{ marginBottom: "10px" }}>
+                    {projectTaskError}
+                  </div>
+                )}
+
+                <div className="form-field">
+                  <input
+                    name="title"
+                    type="text"
+                    className="form-input"
+                    placeholder="Titre de la nouvelle tâche"
+                    value={projectTaskDraft.title}
+                    onChange={handleProjectTaskDraftChange}
+                    disabled={isProjectTaskSaving}
+                  />
+                </div>
+
+                <div className="form-field">
+                  <textarea
+                    name="description"
+                    className="form-input form-textarea"
+                    placeholder="Description (optionnel)"
+                    rows={2}
+                    value={projectTaskDraft.description}
+                    onChange={handleProjectTaskDraftChange}
+                    disabled={isProjectTaskSaving}
+                  />
+                </div>
+
+                <div className="form-row">
+                  <div className="form-field">
+                    <label className="form-label">Statut</label>
+                    <select
+                      name="status"
+                      className="form-input"
+                      value={projectTaskDraft.status}
+                      onChange={handleProjectTaskDraftChange}
+                      disabled={isProjectTaskSaving}
+                    >
+                      <option value="todo">À faire</option>
+                      <option value="in_progress">En cours</option>
+                      <option value="done">Terminé</option>
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">Priorité</label>
+                    <select
+                      name="priority"
+                      className="form-input"
+                      value={projectTaskDraft.priority}
+                      onChange={handleProjectTaskDraftChange}
+                      disabled={isProjectTaskSaving}
+                    >
+                      <option value="low">Faible</option>
+                      <option value="medium">Moyenne</option>
+                      <option value="high">Urgente</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-field">
+                    <label className="form-label">Échéance</label>
+                    <input
+                      name="dueDate"
+                      type="date"
+                      className="form-input"
+                      value={projectTaskDraft.dueDate}
+                      onChange={handleProjectTaskDraftChange}
+                      disabled={isProjectTaskSaving}
+                    />
+                  </div>
+                  <div className="form-field" style={{ display: "flex", alignItems: "flex-end" }}>
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => {
+                        void handleCreateLinkedTask();
+                      }}
+                      style={{ width: "100%" }}
+                      disabled={isProjectTaskSaving}
+                    >
+                      + Ajouter la tâche au projet
+                    </button>
+                  </div>
+                </div>
+
+                {isProjectTasksLoading ? (
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+                    Chargement des tâches liées...
+                  </p>
+                ) : projectTasks.length === 0 ? (
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+                    Aucune tâche liée à ce projet.
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {projectTasks.map((task) => (
+                      <div
+                        key={task.id}
+                        style={{
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-sm)",
+                          padding: "10px 12px",
+                          background: "var(--bg-elevated)",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        {editingTaskId === task.id ? (
+                          <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <input
+                              name="title"
+                              type="text"
+                              className="form-input"
+                              value={editingTaskDraft.title}
+                              onChange={handleEditingTaskDraftChange}
+                              disabled={isProjectTaskSaving}
+                            />
+                            <textarea
+                              name="description"
+                              className="form-input form-textarea"
+                              rows={2}
+                              value={editingTaskDraft.description}
+                              onChange={handleEditingTaskDraftChange}
+                              disabled={isProjectTaskSaving}
+                            />
+                            <div className="form-row">
+                              <select
+                                name="status"
+                                className="form-input"
+                                value={editingTaskDraft.status}
+                                onChange={handleEditingTaskDraftChange}
+                                disabled={isProjectTaskSaving}
+                              >
+                                <option value="todo">À faire</option>
+                                <option value="in_progress">En cours</option>
+                                <option value="done">Terminé</option>
+                              </select>
+                              <select
+                                name="priority"
+                                className="form-input"
+                                value={editingTaskDraft.priority}
+                                onChange={handleEditingTaskDraftChange}
+                                disabled={isProjectTaskSaving}
+                              >
+                                <option value="low">Faible</option>
+                                <option value="medium">Moyenne</option>
+                                <option value="high">Urgente</option>
+                              </select>
+                            </div>
+                            <input
+                              name="dueDate"
+                              type="date"
+                              className="form-input"
+                              value={editingTaskDraft.dueDate}
+                              onChange={handleEditingTaskDraftChange}
+                              disabled={isProjectTaskSaving}
+                            />
+                            <div style={{ display: "flex", gap: "8px" }}>
+                              <button
+                                type="button"
+                                className="btn btn--ghost"
+                                onClick={() => {
+                                  void handleSaveTaskEdition();
+                                }}
+                                disabled={isProjectTaskSaving}
+                              >
+                                Enregistrer
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn--ghost"
+                                onClick={handleCancelTaskEdition}
+                                disabled={isProjectTaskSaving}
+                              >
+                                Annuler
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ minWidth: 0 }}>
+                              <p
+                                style={{
+                                  fontSize: "13px",
+                                  fontWeight: 600,
+                                  color: "var(--text-primary)",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {task.title}
+                              </p>
+                              <p style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                                {task.status} · {task.priority}
+                                {task.dueDate ? ` · ${task.dueDate}` : ""}
+                              </p>
+                            </div>
+                            <div style={{ display: "flex", gap: "8px" }}>
+                              <button
+                                type="button"
+                                className="btn btn--ghost"
+                                onClick={() => startTaskEdition(task)}
+                                disabled={isProjectTaskSaving}
+                              >
+                                Modifier
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn--ghost"
+                                onClick={() => {
+                                  void handleDeleteLinkedTask(task.id);
+                                }}
+                                disabled={isProjectTaskSaving}
+                              >
+                                Supprimer
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
 
           {/* Actions */}
           <div className="modal-actions">

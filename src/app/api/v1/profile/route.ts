@@ -1,18 +1,37 @@
 import { FieldValue } from "firebase-admin/firestore";
 import type { NextRequest } from "next/server";
-import { getFirebaseAdminDb } from "@/lib/firebase-admin";
 import { getAuthenticatedRequestContext } from "@/lib/server/request-context";
 import {
-  buildDefaultUserProfile,
   mapUserProfile,
   sanitizeProfilePatch,
 } from "@/lib/server/resource-schemas";
+import { getOrCreateUserProfileDocument } from "@/lib/server/profile-doc";
 import { jsonError, jsonSuccess } from "@/lib/server/response";
 import { isOriginAllowed, isRateLimited } from "@/lib/server/http-security";
-import { ValidationError } from "@/lib/server/errors";
+import { ValidationError, getErrorCode } from "@/lib/server/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function toResponseStatus(code: string): number {
+  if (code === "auth/unauthorized") {
+    return 401;
+  }
+
+  if (code === "auth/forbidden") {
+    return 403;
+  }
+
+  if (code === "firestore/admin-not-configured") {
+    return 503;
+  }
+
+  if (code.startsWith("validation/")) {
+    return 400;
+  }
+
+  return 500;
+}
 
 function withCorsHeaders(request: NextRequest, response: Response) {
   const origin = request.headers.get("origin");
@@ -37,39 +56,6 @@ export async function OPTIONS(request: NextRequest) {
   return withCorsHeaders(request, response);
 }
 
-async function getOrCreateProfileDocument(uid: string, email: string | null) {
-  const db = getFirebaseAdminDb();
-  if (!db) {
-    throw new ValidationError(
-      "Firebase Admin Firestore non configuré.",
-      "firestore/admin-not-configured"
-    );
-  }
-
-  const docRef = db.collection("users").doc(uid);
-  const existingSnapshot = await docRef.get();
-
-  if (existingSnapshot.exists) {
-    return {
-      docRef,
-      data: existingSnapshot.data() ?? {},
-    };
-  }
-
-  const defaults = buildDefaultUserProfile(uid, email);
-  await docRef.set({
-    ...defaults,
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-  });
-
-  const createdSnapshot = await docRef.get();
-  return {
-    docRef,
-    data: createdSnapshot.data() ?? defaults,
-  };
-}
-
 export async function GET(request: NextRequest) {
   if (!isOriginAllowed(request)) {
     return jsonError("Origin non autorisée.", 403, "cors/origin-not-allowed");
@@ -77,16 +63,18 @@ export async function GET(request: NextRequest) {
 
   try {
     const { uid, email } = await getAuthenticatedRequestContext(request);
-    const { data } = await getOrCreateProfileDocument(uid, email);
+    const { data } = await getOrCreateUserProfileDocument(uid, email);
     const profile = mapUserProfile(uid, data);
     return withCorsHeaders(request, jsonSuccess({ profile }, 200));
   } catch (error) {
-    if (error instanceof ValidationError) {
-      const status = error.code === "firestore/admin-not-configured" ? 503 : 400;
-      return jsonError(error.message, status, error.code);
-    }
+    const code = getErrorCode(error, "profile/load-failed");
+    const status = error instanceof ValidationError ? toResponseStatus(error.code) : toResponseStatus(code);
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "Impossible de charger le profil.";
 
-    return jsonError("Impossible de charger le profil.", 500, "profile/load-failed");
+    return jsonError(message, status, code);
   }
 }
 
@@ -111,7 +99,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const patch = sanitizeProfilePatch(body);
-    const { docRef, data } = await getOrCreateProfileDocument(uid, email);
+    const { docRef, data } = await getOrCreateUserProfileDocument(uid, email);
 
     await docRef.set(
       {
@@ -128,11 +116,13 @@ export async function PATCH(request: NextRequest) {
     const profile = mapUserProfile(uid, updatedSnapshot.data() ?? {});
     return withCorsHeaders(request, jsonSuccess({ profile }, 200));
   } catch (error) {
-    if (error instanceof ValidationError) {
-      const status = error.code === "firestore/admin-not-configured" ? 503 : 400;
-      return jsonError(error.message, status, error.code);
-    }
+    const code = getErrorCode(error, "profile/update-failed");
+    const status = error instanceof ValidationError ? toResponseStatus(error.code) : toResponseStatus(code);
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "Impossible de mettre à jour le profil.";
 
-    return jsonError("Impossible de mettre à jour le profil.", 500, "profile/update-failed");
+    return jsonError(message, status, code);
   }
 }

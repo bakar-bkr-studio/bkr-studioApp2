@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AppSidebar from "@/components/AppSidebar";
+import AppTopBar from "@/components/AppTopBar";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -10,9 +11,17 @@ interface AppShellProps {
 export default function AppShell({ children }: AppShellProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   useEffect(() => {
+    const updateViewportState = () => {
+      setIsMobileViewport(window.innerWidth <= 768);
+    };
+
+    updateViewportState();
+
     const handleResize = () => {
+      updateViewportState();
       if (window.innerWidth > 768) {
         setIsMobileSidebarOpen(false);
       }
@@ -43,25 +52,17 @@ export default function AppShell({ children }: AppShellProps) {
     };
   }, [isMobileSidebarOpen]);
 
+  function handleToggleSidebar() {
+    if (isMobileViewport) {
+      setIsMobileSidebarOpen((currentValue) => !currentValue);
+      return;
+    }
+
+    setIsSidebarCollapsed((currentValue) => !currentValue);
+  }
+
   return (
     <div className={`app-shell ${isSidebarCollapsed ? "is-collapsed" : ""}`}>
-      <header className="mobile-header">
-        <button
-          type="button"
-          className="mobile-header__menu-btn"
-          onClick={() => setIsMobileSidebarOpen(true)}
-          aria-label="Ouvrir le menu"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="3" y1="18" x2="21" y2="18" />
-          </svg>
-        </button>
-
-        <span className="mobile-header__brand">BKR STUDIO</span>
-      </header>
-
       <button
         type="button"
         className={`sidebar-backdrop ${isMobileSidebarOpen ? "is-open" : ""}`}
@@ -76,7 +77,16 @@ export default function AppShell({ children }: AppShellProps) {
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
-      <main className="app-main">{children}</main>
+      <main className="app-main">
+        <AppTopBar
+          isSidebarCollapsed={isSidebarCollapsed}
+          isMobileSidebarOpen={isMobileSidebarOpen}
+          isMobileViewport={isMobileViewport}
+          onToggleSidebar={handleToggleSidebar}
+        />
+
+        <div className="app-main-content">{children}</div>
+      </main>
     </div>
   );
 }

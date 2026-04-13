@@ -116,12 +116,181 @@
     flex: 1;
     margin-left: var(--sidebar-width);
     min-height: 100vh;
-    padding: 32px;
+    padding: 22px 24px 24px;
     transition: margin-left 0.2s ease;
   }
 
   .app-shell.is-collapsed .app-main {
     margin-left: var(--sidebar-collapsed-width);
+  }
+
+  .app-main-content {
+    margin-top: 16px;
+  }
+
+  .app-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    min-height: 58px;
+    border: 1px solid var(--border);
+    background: rgba(17, 17, 17, 0.92);
+    backdrop-filter: blur(8px);
+    border-radius: var(--radius);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+  }
+
+  .app-topbar__left,
+  .app-topbar__right {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+  }
+  .app-topbar__left {
+    justify-content: flex-start;
+    gap: 10px;
+  }
+  .app-topbar__right {
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .app-topbar__toggle {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    flex-shrink: 0;
+  }
+  .app-topbar__toggle:hover {
+    border-color: var(--border-light);
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  .app-topbar__context {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app-topbar__center {
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app-topbar__menu-wrap {
+    position: relative;
+  }
+
+  .app-topbar__action-btn,
+  .app-topbar__profile-btn {
+    min-height: 34px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 0 10px;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .app-topbar__action-btn:hover,
+  .app-topbar__profile-btn:hover {
+    border-color: var(--border-light);
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  .app-topbar__avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent-subtle);
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+
+  .app-topbar__profile-name {
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app-topbar__menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    min-width: 210px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-light);
+    background: var(--bg-surface);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4);
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    z-index: 70;
+  }
+
+  .app-topbar__menu-link {
+    width: 100%;
+    text-align: left;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    padding: 8px 9px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .app-topbar__menu-link:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+  .app-topbar__menu-link--danger {
+    color: #fca5a5;
+  }
+  .app-topbar__menu-link--danger:hover {
+    color: #fecaca;
+    background: rgba(127, 29, 29, 0.36);
+  }
+  .app-topbar__menu-link:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .app-topbar__menu-error {
+    font-size: 11px;
+    line-height: 1.45;
+    color: #fca5a5;
+    padding: 4px 8px 3px;
   }
 
   /* === Sidebar intérieur === */
@@ -378,10 +547,54 @@
     .app-main {
       margin-left: 0;
       width: 100%;
-      padding: calc(var(--mobile-header-height) + 16px) 16px 20px;
+      padding: 14px 14px 20px;
     }
     .app-shell.is-collapsed .app-main {
       margin-left: 0;
+    }
+
+    .app-main-content {
+      margin-top: 12px;
+    }
+
+    .app-topbar {
+      min-height: 54px;
+      grid-template-columns: auto 1fr auto;
+      padding: 7px 8px;
+      gap: 8px;
+    }
+
+    .app-topbar__left {
+      gap: 6px;
+    }
+
+    .app-topbar__context {
+      display: none;
+    }
+
+    .app-topbar__center {
+      font-size: 13px;
+      text-align: left;
+    }
+
+    .app-topbar__action-btn {
+      padding: 0 8px;
+      min-height: 32px;
+      font-size: 12px;
+    }
+
+    .app-topbar__profile-btn {
+      min-height: 32px;
+      padding: 0 8px;
+    }
+
+    .app-topbar__profile-name {
+      display: none;
+    }
+
+    .app-topbar__menu {
+      min-width: 190px;
+      top: calc(100% + 6px);
     }
   }
 
@@ -674,6 +887,48 @@
     line-height: 1.6;
   }
 
+  .settings-danger-zone {
+    margin-top: 16px;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: var(--radius);
+    background: linear-gradient(180deg, rgba(80, 18, 18, 0.35) 0%, rgba(24, 12, 12, 0.82) 100%);
+    overflow: hidden;
+  }
+  .settings-danger-zone__header {
+    padding: 16px 18px;
+    border-bottom: 1px solid rgba(239, 68, 68, 0.26);
+  }
+  .settings-danger-zone__title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fca5a5;
+    margin-bottom: 4px;
+  }
+  .settings-danger-zone__description {
+    font-size: 12px;
+    color: rgba(254, 202, 202, 0.92);
+    max-width: 74ch;
+    line-height: 1.6;
+  }
+  .settings-danger-zone__body {
+    padding: 14px 18px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+  .settings-danger-zone__warning {
+    font-size: 13px;
+    color: #fca5a5;
+    flex: 1;
+    min-width: 240px;
+    line-height: 1.5;
+  }
+  .settings-danger-zone .modal-error {
+    width: 100%;
+    margin-bottom: 0;
+  }
+
   @media (max-width: 520px) {
     .settings-section-card__header {
       padding: 14px 14px;
@@ -698,6 +953,21 @@
     }
     .settings-select {
       width: 100%;
+    }
+
+    .settings-danger-zone__header {
+      padding: 14px 14px;
+    }
+    .settings-danger-zone__body {
+      padding: 12px 14px 14px;
+      align-items: stretch;
+    }
+    .settings-danger-zone__warning {
+      min-width: 100%;
+    }
+    .settings-danger-zone .btn {
+      width: 100%;
+      justify-content: center;
     }
   }
 
@@ -1694,6 +1964,37 @@
     margin-top: 20px;
     padding-top: 20px;
     border-top: 1px solid var(--border);
+  }
+
+  .account-delete-modal {
+    max-width: 560px;
+  }
+  .account-delete-modal__intro {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 10px;
+  }
+  .account-delete-modal__list {
+    margin: 0 0 12px;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .account-delete-modal__warning {
+    margin-bottom: 12px;
+    color: #fca5a5;
+    font-size: 13px;
+  }
+  .account-delete-modal__hint {
+    margin-top: -4px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: var(--text-muted);
   }
 
   /* ============================================
