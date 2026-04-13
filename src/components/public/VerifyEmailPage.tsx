@@ -1,11 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAuthErrorMessage } from "@/lib/auth/auth-errors";
 import { AUTHENTICATED_HOME_ROUTE } from "@/lib/auth/route-access";
 import { useAuth } from "@/lib/auth/use-auth";
+
+interface SessionStatusPayload {
+  authenticated: boolean;
+  emailVerified: boolean;
+}
+
+const SERVER_SESSION_POLL_ATTEMPTS = 3;
+const SERVER_SESSION_POLL_DELAY_MS = 450;
+
+function wait(delayMs: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  });
+}
 
 export default function VerifyEmailPage() {
   const router = useRouter();
@@ -22,8 +36,136 @@ export default function VerifyEmailPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isCheckingVerification, setIsCheckingVerification] = useState(false);
+  const [isFinalizingVerification, setIsFinalizingVerification] = useState(false);
   const [isResendingEmail, setIsResendingEmail] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const hasRequestedLoginRedirectRef = useRef(false);
+  const hasRequestedDashboardRedirectRef = useRef(false);
+  const hasAutoSyncAttemptedRef = useRef(false);
+  const isFinalizingVerificationRef = useRef(false);
+
+  const logDebug = useCallback((message: string, extra?: unknown) => {
+    if (process.env.NODE_ENV !== "production") {
+      if (typeof extra === "undefined") {
+        console.debug(`[VerifyEmail] ${message}`);
+      } else {
+        console.debug(`[VerifyEmail] ${message}`, extra);
+      }
+    }
+  }, []);
+
+  const redirectToLoginOnce = useCallback(() => {
+    if (hasRequestedLoginRedirectRef.current) {
+      return;
+    }
+
+    hasRequestedLoginRedirectRef.current = true;
+    logDebug("Redirection vers /login.");
+    router.replace("/login");
+  }, [logDebug, router]);
+
+  const redirectToDashboardOnce = useCallback(
+    (reason: string) => {
+      if (hasRequestedDashboardRedirectRef.current) {
+        return;
+      }
+
+      hasRequestedDashboardRedirectRef.current = true;
+      logDebug(`Redirection vers ${AUTHENTICATED_HOME_ROUTE}.`, { reason });
+      router.replace(AUTHENTICATED_HOME_ROUTE);
+    },
+    [logDebug, router]
+  );
+
+  const getServerSessionStatus = useCallback(async (): Promise<SessionStatusPayload> => {
+    const response = await fetch("/api/auth/session", {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    });
+
+    if (!response.ok) {
+      const code = `http_${response.status}`;
+      throw new Error(`auth/session-status-failed:${code}`);
+    }
+
+    const payload = (await response.json()) as Partial<SessionStatusPayload>;
+    return {
+      authenticated: payload.authenticated === true,
+      emailVerified: payload.emailVerified === true,
+    };
+  }, []);
+
+  const syncVerifiedSessionAndRedirect = useCallback(
+    async (source: "auto" | "manual") => {
+      if (isFinalizingVerificationRef.current) {
+        return;
+      }
+
+      isFinalizingVerificationRef.current = true;
+      setActionError(null);
+      setStatusMessage("Validation en cours...");
+      setIsFinalizingVerification(true);
+      logDebug("Début de synchronisation post-vérification.", { source });
+
+      try {
+        const refreshedUser = await refreshUser();
+
+        if (!refreshedUser?.emailVerified) {
+          setStatusMessage(
+            "Votre email n'est pas encore vérifié. Vérifiez votre boîte mail puis réessayez."
+          );
+          logDebug("Email toujours non vérifié après refresh.", { source });
+          return;
+        }
+
+        let serverSessionIsVerified = false;
+
+        for (let attempt = 1; attempt <= SERVER_SESSION_POLL_ATTEMPTS; attempt += 1) {
+          const sessionStatus = await getServerSessionStatus();
+          logDebug("Statut session serveur récupéré.", { attempt, sessionStatus });
+
+          if (sessionStatus.authenticated && sessionStatus.emailVerified) {
+            serverSessionIsVerified = true;
+            break;
+          }
+
+          if (attempt < SERVER_SESSION_POLL_ATTEMPTS) {
+            await wait(SERVER_SESSION_POLL_DELAY_MS);
+            await refreshUser();
+          }
+        }
+
+        if (!serverSessionIsVerified) {
+          setStatusMessage(null);
+          setActionError(
+            "Votre email est vérifié, mais la session serveur n'est pas encore à jour. Réessayez dans quelques secondes."
+          );
+          logDebug("Session serveur non synchronisée après plusieurs tentatives.");
+          return;
+        }
+
+        setStatusMessage("Validation en cours...");
+        redirectToDashboardOnce("session-verified");
+      } catch (error) {
+        logDebug("Erreur pendant la synchronisation post-vérification.", error);
+        setStatusMessage(null);
+        setActionError(getAuthErrorMessage(error, "email-verification"));
+      } finally {
+        setIsFinalizingVerification(false);
+        isFinalizingVerificationRef.current = false;
+      }
+    },
+    [
+      getServerSessionStatus,
+      logDebug,
+      redirectToDashboardOnce,
+      refreshUser,
+    ]
+  );
 
   useEffect(() => {
     if (!isReady) {
@@ -31,14 +173,31 @@ export default function VerifyEmailPage() {
     }
 
     if (!isAuthenticated) {
-      router.replace("/login");
+      redirectToLoginOnce();
       return;
     }
 
-    if (isEmailVerified) {
-      router.replace(AUTHENTICATED_HOME_ROUTE);
+    hasRequestedLoginRedirectRef.current = false;
+
+    if (!isEmailVerified) {
+      hasAutoSyncAttemptedRef.current = false;
+      hasRequestedDashboardRedirectRef.current = false;
+      return;
     }
-  }, [isAuthenticated, isEmailVerified, isReady, router]);
+
+    if (hasAutoSyncAttemptedRef.current) {
+      return;
+    }
+
+    hasAutoSyncAttemptedRef.current = true;
+    void syncVerifiedSessionAndRedirect("auto");
+  }, [
+    isAuthenticated,
+    isEmailVerified,
+    isReady,
+    redirectToLoginOnce,
+    syncVerifiedSessionAndRedirect,
+  ]);
 
   async function handleCheckVerification() {
     setActionError(null);
@@ -46,16 +205,7 @@ export default function VerifyEmailPage() {
     setIsCheckingVerification(true);
 
     try {
-      const refreshedUser = await refreshUser();
-
-      if (refreshedUser?.emailVerified) {
-        router.replace(AUTHENTICATED_HOME_ROUTE);
-        return;
-      }
-
-      setStatusMessage("Votre email n'est pas encore vérifié. Vérifiez votre boîte mail puis réessayez.");
-    } catch (error) {
-      setActionError(getAuthErrorMessage(error, "email-verification"));
+      await syncVerifiedSessionAndRedirect("manual");
     } finally {
       setIsCheckingVerification(false);
     }
@@ -83,7 +233,7 @@ export default function VerifyEmailPage() {
 
     try {
       await logout();
-      router.replace("/login");
+      redirectToLoginOnce();
     } catch (error) {
       setActionError(getAuthErrorMessage(error, "logout"));
     } finally {
@@ -107,13 +257,8 @@ export default function VerifyEmailPage() {
     );
   }
 
-  if (isEmailVerified) {
-    return (
-      <p className="mx-auto w-full max-w-5xl text-sm text-[var(--text-secondary)]">
-        Redirection vers votre dashboard...
-      </p>
-    );
-  }
+  const isPrimaryActionLoading = isCheckingVerification || isFinalizingVerification;
+  const isEmailFlowCompleted = isEmailVerified;
 
   return (
     <div className="mx-auto w-full max-w-5xl">
@@ -124,12 +269,13 @@ export default function VerifyEmailPage() {
           </p>
 
           <h1 className="mt-3 text-2xl font-semibold text-[var(--text-primary)] sm:text-3xl">
-            Confirmez votre adresse email
+            {isEmailFlowCompleted ? "Email confirmé" : "Confirmez votre adresse email"}
           </h1>
 
           <p className="mt-3 text-sm leading-relaxed text-[var(--text-secondary)] sm:text-base">
-            Un email de confirmation vient d&apos;être envoyé. Ouvrez ce message puis cliquez sur le
-            lien de validation.
+            {isEmailFlowCompleted
+              ? "Votre adresse email est validée. Nous finalisons maintenant la synchronisation de session."
+              : "Un email de confirmation vient d&apos;être envoyé. Ouvrez ce message puis cliquez sur le lien de validation."}
           </p>
 
           <div className="mt-6 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-sm text-[var(--text-secondary)]">
@@ -141,20 +287,26 @@ export default function VerifyEmailPage() {
             <button
               type="button"
               onClick={handleCheckVerification}
-              disabled={isCheckingVerification}
+              disabled={isPrimaryActionLoading}
               className="w-full rounded-lg bg-[var(--accent)] px-5 py-3 text-sm font-medium text-white transition hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {isCheckingVerification ? "Vérification..." : "J'ai confirmé mon email"}
+              {isPrimaryActionLoading
+                ? "Validation en cours..."
+                : isEmailFlowCompleted
+                  ? "Continuer vers le dashboard"
+                  : "J'ai confirmé mon email"}
             </button>
 
-            <button
-              type="button"
-              onClick={handleResendEmail}
-              disabled={isResendingEmail}
-              className="w-full rounded-lg border border-[var(--border-light)] bg-[var(--bg-elevated)] px-5 py-3 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {isResendingEmail ? "Envoi..." : "Renvoyer l'email"}
-            </button>
+            {!isEmailFlowCompleted && (
+              <button
+                type="button"
+                onClick={handleResendEmail}
+                disabled={isResendingEmail}
+                className="w-full rounded-lg border border-[var(--border-light)] bg-[var(--bg-elevated)] px-5 py-3 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isResendingEmail ? "Envoi..." : "Renvoyer l'email"}
+              </button>
+            )}
 
             <button
               type="button"
@@ -194,11 +346,14 @@ export default function VerifyEmailPage() {
             Étape requise
           </p>
           <h2 className="mt-3 text-xl font-semibold text-[var(--text-primary)] sm:text-2xl">
-            Validation email avant accès complet
+            {isEmailFlowCompleted
+              ? "Synchronisation de session en cours"
+              : "Validation email avant accès complet"}
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-[var(--text-secondary)]">
-            Tant que l&apos;adresse email n&apos;est pas validée, l&apos;accès aux pages privées est
-            bloqué pour protéger votre compte.
+            {isEmailFlowCompleted
+              ? "Nous alignons la session serveur avec votre statut vérifié avant de vous rediriger vers le dashboard."
+              : "Tant que l&apos;adresse email n&apos;est pas validée, l&apos;accès aux pages privées est bloqué pour protéger votre compte."}
           </p>
         </aside>
       </div>

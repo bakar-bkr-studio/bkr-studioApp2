@@ -6,6 +6,7 @@ import {
 import {
   createServerSessionCookie,
   type SessionOperationError,
+  verifyServerSessionCookie,
 } from "@/lib/auth/server-session";
 import { isOriginAllowed, isRateLimited } from "@/lib/server/http-security";
 
@@ -14,6 +15,11 @@ export const dynamic = "force-dynamic";
 
 interface SessionRequestBody {
   idToken?: unknown;
+}
+
+interface SessionStatusResponse {
+  authenticated: boolean;
+  emailVerified: boolean;
 }
 
 function toAuthErrorCode(error: unknown) {
@@ -27,6 +33,47 @@ function toAuthErrorCode(error: unknown) {
   }
 
   return "auth/session-sync-failed";
+}
+
+export async function GET(request: NextRequest) {
+  if (!isOriginAllowed(request)) {
+    return NextResponse.json(
+      { code: "cors/origin-not-allowed", error: "Origin non autorisée." },
+      { status: 403 }
+    );
+  }
+
+  const { limited } = isRateLimited(request, "api:auth:session:status", 60, 5 * 60_000);
+  if (limited) {
+    return NextResponse.json(
+      { code: "rate-limit/exceeded", error: "Trop de requêtes. Réessayez plus tard." },
+      { status: 429 }
+    );
+  }
+
+  const sessionCookie = request.cookies.get(AUTH_SESSION_COOKIE_NAME)?.value;
+  if (!sessionCookie) {
+    const payload: SessionStatusResponse = {
+      authenticated: false,
+      emailVerified: false,
+    };
+    return NextResponse.json(payload, { status: 200 });
+  }
+
+  const decodedSession = await verifyServerSessionCookie(sessionCookie, true);
+  if (!decodedSession?.uid) {
+    const payload: SessionStatusResponse = {
+      authenticated: false,
+      emailVerified: false,
+    };
+    return NextResponse.json(payload, { status: 200 });
+  }
+
+  const payload: SessionStatusResponse = {
+    authenticated: true,
+    emailVerified: Boolean(decodedSession.email_verified),
+  };
+  return NextResponse.json(payload, { status: 200 });
 }
 
 export async function POST(request: NextRequest) {
