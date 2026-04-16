@@ -14,10 +14,10 @@ interface DashboardLinkItem {
   id: string;
   label: string;
   url: string;
-  category?: string;
+  category: string | null;
   isPinned: boolean;
   openCount: number;
-  lastOpenedAt?: string;
+  lastOpenedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -66,7 +66,7 @@ function getHostname(url: string) {
   }
 }
 
-function formatOpenedAt(date?: string) {
+function formatOpenedAt(date: string | null) {
   if (!date) {
     return "Jamais ouvert";
   }
@@ -78,6 +78,20 @@ function formatOpenedAt(date?: string) {
   }
 
   return `Ouvert le ${parsed.toLocaleDateString("fr-FR")}`;
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Erreur inconnue";
+}
+
+function logDashboardLinksDebug(context: string, payload?: unknown) {
+  if (process.env.NODE_ENV !== "production") {
+    console.debug(`[DashboardLinks] ${context}`, payload);
+  }
 }
 
 function normalizeLink(input: DashboardUsefulLink, index: number): DashboardLinkItem | null {
@@ -95,15 +109,15 @@ function normalizeLink(input: DashboardUsefulLink, index: number): DashboardLink
     id,
     label,
     url: normalizedUrl,
-    category: input.category?.trim() || undefined,
+    category: input.category?.trim() || null,
     isPinned: Boolean(input.isPinned),
     openCount:
       typeof input.openCount === "number" && Number.isFinite(input.openCount)
         ? Math.max(0, Math.round(input.openCount))
         : 0,
-    lastOpenedAt: input.lastOpenedAt,
-    createdAt: input.createdAt ?? nowIso,
-    updatedAt: input.updatedAt ?? input.createdAt ?? nowIso,
+    lastOpenedAt: input.lastOpenedAt ?? null,
+    createdAt: input.createdAt || nowIso,
+    updatedAt: input.updatedAt || input.createdAt || nowIso,
   };
 }
 
@@ -248,17 +262,25 @@ export default function DashboardLinks({
     setIsPersisting(true);
 
     try {
+      const payload = mapLinksForFirestore(nextLinks);
+      logDashboardLinksDebug("Payload usefulLinks envoyé", payload);
+
       const updated = await updateUserDashboardData({
-        usefulLinks: mapLinksForFirestore(nextLinks),
+        usefulLinks: payload,
       });
 
+      logDashboardLinksDebug("Payload usefulLinks relu depuis API", updated.usefulLinks);
       setLinks(normalizeLinks(updated.usefulLinks));
 
       if (successMessage) {
         setStatusMessage(successMessage);
       }
-    } catch {
+    } catch (error) {
       setLinks(previousLinks);
+      logDashboardLinksDebug("Échec de sauvegarde usefulLinks", {
+        errorMessage: getErrorMessage(error),
+        error,
+      });
       setStatusMessage("Impossible de sauvegarder les liens utiles.");
     } finally {
       setIsPersisting(false);
@@ -320,7 +342,7 @@ export default function DashboardLinks({
               ...link,
               label: trimmedLabel,
               url: normalizedUrl,
-              category: category || undefined,
+              category: category || null,
               isPinned: form.isPinned,
               updatedAt: now,
             }
@@ -337,9 +359,10 @@ export default function DashboardLinks({
       id: `link-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       label: trimmedLabel,
       url: normalizedUrl,
-      category: category || undefined,
+      category: category || null,
       isPinned: form.isPinned,
       openCount: 0,
+      lastOpenedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -419,6 +442,7 @@ export default function DashboardLinks({
       category,
       isPinned: false,
       openCount: 0,
+      lastOpenedAt: null,
       createdAt: now,
       updatedAt: now,
     };

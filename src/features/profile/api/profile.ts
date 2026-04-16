@@ -44,13 +44,15 @@ export interface UserDashboardData {
 }
 
 interface UsefulLinkRecord {
-  id: string;
-  label: string;
-  url: string;
-  category?: string;
+  id?: string;
+  label?: string;
+  name?: string;
+  url?: string;
+  category?: string | null;
   isPinned?: boolean;
+  pinned?: boolean;
   openCount?: number;
-  lastOpenedAt?: string;
+  lastOpenedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -72,31 +74,42 @@ function normalizeUsefulLinks(value: unknown): DashboardUsefulLink[] {
     return [];
   }
 
-  return value.reduce<DashboardUsefulLink[]>((accumulator, item) => {
+  return value.reduce<DashboardUsefulLink[]>((accumulator, item, index) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) {
       return accumulator;
     }
 
     const record = item as UsefulLinkRecord;
+    const nowIso = new Date().toISOString();
+    const id =
+      typeof record.id === "string" && record.id.trim()
+        ? record.id.trim()
+        : `link-${Date.now()}-${index}`;
+    const labelSource = typeof record.label === "string" ? record.label : record.name;
+    const label = typeof labelSource === "string" ? labelSource.trim() : "";
+    const url = typeof record.url === "string" ? record.url.trim() : "";
 
-    if (typeof record.id !== "string" || typeof record.label !== "string" || typeof record.url !== "string") {
+    if (!label || !url) {
       return accumulator;
     }
 
     accumulator.push({
-      id: record.id,
-      label: record.label,
-      url: record.url,
-      category: typeof record.category === "string" ? record.category : undefined,
-      isPinned: Boolean(record.isPinned),
+      id,
+      label,
+      url,
+      category: typeof record.category === "string" ? record.category : null,
+      isPinned:
+        typeof record.isPinned === "boolean"
+          ? record.isPinned
+          : Boolean(record.pinned),
       openCount:
         typeof record.openCount === "number" && Number.isFinite(record.openCount)
           ? Math.max(0, Math.round(record.openCount))
           : 0,
       lastOpenedAt:
-        typeof record.lastOpenedAt === "string" ? record.lastOpenedAt : undefined,
-      createdAt: typeof record.createdAt === "string" ? record.createdAt : undefined,
-      updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : undefined,
+        typeof record.lastOpenedAt === "string" ? record.lastOpenedAt : null,
+      createdAt: typeof record.createdAt === "string" ? record.createdAt : nowIso,
+      updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : nowIso,
     });
 
     return accumulator;

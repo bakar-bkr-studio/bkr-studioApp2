@@ -63,12 +63,12 @@ export interface DashboardUsefulLink {
   id: string;
   label: string;
   url: string;
-  category?: string;
-  isPinned?: boolean;
-  openCount?: number;
-  lastOpenedAt?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  category: string | null;
+  isPinned: boolean;
+  openCount: number;
+  lastOpenedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // --- Projet ---

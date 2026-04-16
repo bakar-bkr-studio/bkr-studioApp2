@@ -736,31 +736,37 @@ function normalizeLinksFromProfile(value: unknown): DashboardUsefulLink[] {
       return accumulator;
     }
 
-    const record = item as AnyRecord;
-    const id = toRequiredString(record.id ?? `link-${Date.now()}-${index}`, "id", 120);
-    const label = toRequiredString(record.label, "label", 120);
-    const url = toRequiredString(record.url, "url", 2000);
-    const category = toNullableString(record.category, "category", 120) ?? undefined;
-    const isPinned = Boolean(record.isPinned);
-    const openCount =
-      typeof record.openCount === "number" && Number.isFinite(record.openCount)
-        ? Math.max(0, Math.round(record.openCount))
-        : 0;
-    const lastOpenedAt = toNullableString(record.lastOpenedAt, "lastOpenedAt", 120) ?? undefined;
-    const createdAt = isoFromUnknown(record.createdAt, nowIso);
-    const updatedAt = isoFromUnknown(record.updatedAt, createdAt);
+    try {
+      const record = item as AnyRecord;
+      const id = toRequiredString(record.id ?? `link-${Date.now()}-${index}`, "id", 120);
+      const label = toRequiredString(record.label ?? record.name, "label", 120);
+      const url = toRequiredString(record.url, "url", 2000);
+      const category = toNullableString(record.category, "category", 120);
+      const isPinned = hasOwn(record, "isPinned")
+        ? Boolean(record.isPinned)
+        : Boolean(record.pinned);
+      const openCount =
+        typeof record.openCount === "number" && Number.isFinite(record.openCount)
+          ? Math.max(0, Math.round(record.openCount))
+          : 0;
+      const lastOpenedAt = toNullableString(record.lastOpenedAt, "lastOpenedAt", 120);
+      const createdAt = isoFromUnknown(record.createdAt, nowIso);
+      const updatedAt = isoFromUnknown(record.updatedAt, createdAt);
 
-    accumulator.push({
-      id,
-      label,
-      url,
-      category,
-      isPinned,
-      openCount,
-      lastOpenedAt,
-      createdAt,
-      updatedAt,
-    });
+      accumulator.push({
+        id,
+        label,
+        url,
+        category,
+        isPinned,
+        openCount,
+        lastOpenedAt,
+        createdAt,
+        updatedAt,
+      });
+    } catch {
+      // Ignore malformed legacy entries to keep dashboard/profile resilient.
+    }
 
     return accumulator;
   }, []);
