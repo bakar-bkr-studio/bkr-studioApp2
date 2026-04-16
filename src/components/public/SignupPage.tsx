@@ -10,7 +10,14 @@ import { getAuthErrorMessage } from "@/lib/auth/auth-errors";
 
 export default function SignupPage() {
   const router = useRouter();
-  const { isReady, isAuthenticated, isEmailVerified, signup, isAuthAvailable } = useAuth();
+  const {
+    isReady,
+    isAuthenticated,
+    isEmailVerified,
+    isServerSessionSynced,
+    signup,
+    isAuthAvailable,
+  } = useAuth();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,11 +32,11 @@ export default function SignupPage() {
   }, [password, confirmPassword]);
 
   useEffect(() => {
-    if (isReady && isAuthenticated) {
+    if (isReady && isAuthenticated && isServerSessionSynced) {
       const destination = isEmailVerified ? AUTHENTICATED_HOME_ROUTE : VERIFY_EMAIL_ROUTE;
       router.replace(destination);
     }
-  }, [isAuthenticated, isEmailVerified, isReady, router]);
+  }, [isAuthenticated, isEmailVerified, isReady, isServerSessionSynced, router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,6 +70,14 @@ export default function SignupPage() {
     return (
       <p className="mx-auto w-full max-w-5xl text-sm text-[var(--text-secondary)]">
         Vérification de la session...
+      </p>
+    );
+  }
+
+  if (isAuthenticated && !isServerSessionSynced) {
+    return (
+      <p className="mx-auto w-full max-w-5xl text-sm text-[var(--text-secondary)]">
+        Validation en cours...
       </p>
     );
   }

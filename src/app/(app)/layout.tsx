@@ -10,20 +10,32 @@ export default async function PrivateAppLayout({
 }: {
   children: React.ReactNode;
 }) {
+  console.log("[Layout] Private layout SSR starting");
   const session = await getCurrentServerSession();
 
   if (!session) {
+    console.log("[Layout] Invalid session, redirecting to login");
     redirect("/login");
   }
 
   if (!session.email_verified) {
+    console.log("[Layout] Email unverified, redirecting");
     redirect(VERIFY_EMAIL_ROUTE);
   }
 
-  const profile = await getOrCreateUserProfileForUser(
-    session.uid,
-    typeof session.email === "string" ? session.email : null
-  );
+  console.log(`[Layout] Server session valid: uid=${session.uid}`);
+
+  let profile;
+  try {
+    profile = await getOrCreateUserProfileForUser(
+      session.uid,
+      typeof session.email === "string" ? session.email : null
+    );
+    console.log(`[Layout] Profile checked for uid=${session.uid}. OnboardingCompleted=${profile.onboardingCompleted}`);
+  } catch (error) {
+    console.error(`[Layout] ERROR FETCHING PROFILE FOR UID=${session.uid}:`, error);
+    throw error;
+  }
 
   if (!profile.onboardingCompleted) {
     redirect(ONBOARDING_ROUTE);

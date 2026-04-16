@@ -11,8 +11,18 @@ import { getAuthErrorMessage } from "@/lib/auth/auth-errors";
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isReady, isAuthenticated, isEmailVerified, login, isAuthAvailable } = useAuth();
+  const {
+    isReady,
+    isAuthenticated,
+    isEmailVerified,
+    isServerSessionSynced,
+    serverSessionSyncErrorCode,
+    login,
+    logout,
+    isAuthAvailable,
+  } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const nextPathFromQuery = searchParams.get("next");
   const nextPath =
@@ -21,11 +31,11 @@ export default function LoginPage() {
       : AUTHENTICATED_HOME_ROUTE;
 
   useEffect(() => {
-    if (isReady && isAuthenticated) {
+    if (isReady && isAuthenticated && isServerSessionSynced) {
       const destination = isEmailVerified ? nextPath : VERIFY_EMAIL_ROUTE;
       router.replace(destination);
     }
-  }, [isAuthenticated, isEmailVerified, isReady, nextPath, router]);
+  }, [isAuthenticated, isEmailVerified, isReady, isServerSessionSynced, nextPath, router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,11 +60,46 @@ export default function LoginPage() {
     }
   }
 
+  async function handleForceLogout() {
+    if (isSigningOut) {
+      return;
+    }
+
+    setIsSigningOut(true);
+    try {
+      await logout();
+    } finally {
+      setIsSigningOut(false);
+    }
+  }
+
   if (!isReady) {
     return (
       <p className="mx-auto w-full max-w-5xl text-sm text-[var(--text-secondary)]">
         Vérification de la session...
       </p>
+    );
+  }
+
+  if (isAuthenticated && !isServerSessionSynced) {
+    return (
+      <div className="mx-auto w-full max-w-5xl space-y-3 text-sm text-[var(--text-secondary)]">
+        <p>Validation en cours...</p>
+        <p>Synchronisation de la session sécurisée.</p>
+        {serverSessionSyncErrorCode && (
+          <p className="text-xs text-[var(--amber)]">
+            Session serveur indisponible ({serverSessionSyncErrorCode}). Veuillez vous reconnecter.
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={handleForceLogout}
+          disabled={isSigningOut}
+          className="rounded-lg border border-[var(--border-light)] bg-transparent px-4 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {isSigningOut ? "Déconnexion..." : "Se déconnecter"}
+        </button>
+      </div>
     );
   }
 

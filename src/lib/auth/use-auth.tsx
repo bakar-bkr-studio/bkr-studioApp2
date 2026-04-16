@@ -34,6 +34,8 @@ interface AuthContextValue {
   isReady: boolean;
   isAuthenticated: boolean;
   isEmailVerified: boolean;
+  isServerSessionSynced: boolean;
+  serverSessionSyncErrorCode: string | null;
   isAuthAvailable: boolean;
   user: AuthUser | null;
   login: (email: string, password: string) => Promise<void>;
@@ -74,10 +76,23 @@ function createNoCurrentUserError() {
 
 function createServerSessionSyncError(code = "auth/session-sync-failed") {
   const error = new Error(
-    "Impossible de synchroniser la session serveur. Réessayez dans quelques instants."
+    `Impossible de synchroniser la session serveur (${code}). Réessayez dans quelques instants.`
   ) as Error & { code?: string };
   error.code = code;
   return error;
+}
+
+function getErrorCode(error: unknown): string | null {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+
+  return null;
 }
 
 async function syncServerSessionFromIdToken(idToken: string) {
@@ -131,6 +146,8 @@ async function clearServerSession(idToken?: string) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const auth = useMemo(() => getFirebaseAuth(), []);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [isServerSessionSynced, setIsServerSessionSynced] = useState(true);
+  const [serverSessionSyncErrorCode, setServerSessionSyncErrorCode] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
   const hasResolvedInitialAuthRef = useRef(false);
   const lastSyncedTokenRef = useRef<string | null>(null);
@@ -180,21 +197,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setAuthUser(mapAuthUser(nextUser));
 
             if (nextUser) {
+              setIsServerSessionSynced(false);
+              setServerSessionSyncErrorCode(null);
               void (async () => {
                 try {
                   const idToken = await nextUser.getIdToken();
+                  if (!isMounted) {
+                    return;
+                  }
 
                   if (lastSyncedTokenRef.current === idToken) {
+                    setIsServerSessionSynced(true);
+                    setServerSessionSyncErrorCode(null);
                     return;
                   }
 
                   await syncServerSessionFromIdToken(idToken);
+                  if (!isMounted) {
+                    return;
+                  }
                   lastSyncedTokenRef.current = idToken;
+                  setIsServerSessionSynced(true);
+                  setServerSessionSyncErrorCode(null);
                 } catch (error) {
+                  if (!isMounted) {
+                    return;
+                  }
+                  setIsServerSessionSynced(false);
+                  setServerSessionSyncErrorCode(
+                    getErrorCode(error) ?? "auth/session-sync-failed"
+                  );
                   logAuthError("Impossible de synchroniser la session serveur.", error);
                 }
               })();
             } else {
+              setIsServerSessionSynced(true);
+              setServerSessionSyncErrorCode(null);
               lastSyncedTokenRef.current = null;
               void clearServerSession().catch((error) => {
                 logAuthError("Impossible de supprimer la session serveur.", error);
@@ -203,6 +241,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch (error) {
             logAuthError("Erreur pendant la mise à jour de l'état utilisateur.", error);
             setAuthUser(null);
+            setIsServerSessionSynced(false);
+            setServerSessionSyncErrorCode(
+              getErrorCode(error) ?? "auth/session-sync-failed"
+            );
           } finally {
             clearTimeout(fallbackTimeout);
             markAuthReady();
@@ -215,6 +257,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           logAuthError("Erreur dans onIdTokenChanged.", error);
           setAuthUser(null);
+          setIsServerSessionSynced(false);
+          setServerSessionSyncErrorCode(getErrorCode(error) ?? "auth/session-sync-failed");
           clearTimeout(fallbackTimeout);
           markAuthReady();
         }
@@ -222,6 +266,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       logAuthError("Échec d'initialisation du listener onIdTokenChanged.", error);
       setAuthUser(null);
+      setIsServerSessionSynced(false);
+      setServerSessionSyncErrorCode(getErrorCode(error) ?? "auth/session-sync-failed");
       clearTimeout(fallbackTimeout);
       markAuthReady();
     }
@@ -243,6 +289,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const idToken = await credentials.user.getIdToken();
       await syncServerSessionFromIdToken(idToken);
       lastSyncedTokenRef.current = idToken;
+      setIsServerSessionSynced(true);
+      setServerSessionSyncErrorCode(null);
     },
     [auth]
   );
@@ -257,6 +305,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const idToken = await credentials.user.getIdToken();
       await syncServerSessionFromIdToken(idToken);
       lastSyncedTokenRef.current = idToken;
+      setIsServerSessionSynced(true);
+      setServerSessionSyncErrorCode(null);
 
       try {
         const actionCodeSettings = getEmailVerificationActionCodeSettings();
@@ -305,6 +355,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!currentUser) {
       setAuthUser(null);
       lastSyncedTokenRef.current = null;
+      setIsServerSessionSynced(true);
+      setServerSessionSyncErrorCode(null);
       return null;
     }
 
@@ -316,12 +368,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthUser(null);
       lastSyncedTokenRef.current = null;
       await clearServerSession();
+      setIsServerSessionSynced(true);
+      setServerSessionSyncErrorCode(null);
       return null;
     }
 
     const idToken = await refreshedUser.getIdToken(true);
     await syncServerSessionFromIdToken(idToken);
     lastSyncedTokenRef.current = idToken;
+    setIsServerSessionSynced(true);
+    setServerSessionSyncErrorCode(null);
 
     const mappedUser = mapAuthUser(refreshedUser);
     setAuthUser(mappedUser);
@@ -350,6 +406,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signOut(auth);
     setAuthUser(null);
     lastSyncedTokenRef.current = null;
+    setIsServerSessionSynced(true);
+    setServerSessionSyncErrorCode(null);
   }, [auth]);
 
   const value = useMemo<AuthContextValue>(
@@ -357,6 +415,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isReady,
       isAuthenticated: Boolean(authUser),
       isEmailVerified: Boolean(authUser?.emailVerified),
+      isServerSessionSynced,
+      serverSessionSyncErrorCode,
       isAuthAvailable: Boolean(auth),
       user: authUser,
       login,
@@ -370,9 +430,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       auth,
       authUser,
       isReady,
+      isServerSessionSynced,
       login,
       logout,
       refreshUser,
+      serverSessionSyncErrorCode,
       sendPasswordReset,
       sendVerificationEmail,
       signup,

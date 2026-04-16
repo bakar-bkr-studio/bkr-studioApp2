@@ -21,7 +21,16 @@ export async function getOrCreateUserProfileDocument(uid: string, email: string 
   }
 
   const docRef = db.collection("users").doc(uid);
-  const existingSnapshot = await docRef.get();
+  console.log(`[ProfileDoc] Fetching profile doc for uid=${uid}`);
+  
+  let existingSnapshot;
+  try {
+    existingSnapshot = await docRef.get();
+    console.log(`[ProfileDoc] Profile doc fetch successful. Exists=${existingSnapshot.exists}`);
+  } catch (err) {
+    console.error(`[ProfileDoc] PROFILE DOC GET FAILED for uid=${uid}:`, err);
+    throw err;
+  }
 
   if (existingSnapshot.exists) {
     return {

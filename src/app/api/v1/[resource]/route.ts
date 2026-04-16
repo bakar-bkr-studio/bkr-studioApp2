@@ -76,13 +76,17 @@ export async function GET(
 
   const { resource: rawResource } = await context.params;
   const resource = parseResource(rawResource);
+  console.log(`[API/resource] GET called for resource=${rawResource} (parsed=${resource})`);
+
   if (!resource) {
+    console.warn(`[API/resource] GET Unsupported resource: ${rawResource}`);
     return jsonError("Ressource non supportée.", 404, "resource/not-found");
   }
 
   try {
     const db = getFirebaseAdminDb();
     if (!db) {
+      console.warn(`[API/resource] GET [${resource}] Firebase Admin db not found`);
       return jsonError(
         "Firebase Admin Firestore non configuré.",
         503,
@@ -91,13 +95,17 @@ export async function GET(
     }
 
     const { uid } = await getAuthenticatedRequestContext(request);
+    console.log(`[API/resource] GET [${resource}] Resolved UID=${uid}`);
+    
     const sortField = getResourceSortField(resource);
 
+    console.log(`[API/resource] GET [${resource}] Fetching from firestore...`);
     const snapshot = await db
       .collection(getCollectionName(resource))
       .where("userId", "==", uid)
       .orderBy(sortField, "desc")
       .get();
+    console.log(`[API/resource] GET [${resource}] Fetch success, found ${snapshot.size} docs`);
 
     const items = snapshot.docs.map((doc) =>
       mapResourceRecord(resource, doc.id, doc.data())
@@ -112,7 +120,9 @@ export async function GET(
         ? error.message
         : "Impossible de charger les données.";
 
-    return jsonError(message, status, code);
+    console.error(`[API/resource] GET [${resource ?? "unknown"}] ERROR: ${code} - ${message}`, error);
+
+    return jsonError(`[Debug Info] ${message}`, status, code);
   }
 }
 
@@ -131,6 +141,8 @@ export async function POST(
 
   const { resource: rawResource } = await context.params;
   const resource = parseResource(rawResource);
+  console.log(`[API/resource] POST called for resource=${rawResource}`);
+
   if (!resource) {
     return jsonError("Ressource non supportée.", 404, "resource/not-found");
   }
@@ -181,6 +193,8 @@ export async function POST(
         ? error.message
         : "Impossible de créer la ressource.";
 
-    return jsonError(message, status, code);
+    console.error(`[API/resource] POST [${resource ?? "unknown"}] ERROR: ${code} - ${message}`, error);
+
+    return jsonError(`[Debug Info] ${message}`, status, code);
   }
 }

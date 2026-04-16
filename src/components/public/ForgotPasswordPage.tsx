@@ -26,7 +26,14 @@ function getErrorCode(error: unknown): string | null {
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
-  const { isReady, isAuthenticated, isEmailVerified, sendPasswordReset, isAuthAvailable } = useAuth();
+  const {
+    isReady,
+    isAuthenticated,
+    isEmailVerified,
+    isServerSessionSynced,
+    sendPasswordReset,
+    isAuthAvailable,
+  } = useAuth();
 
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -34,13 +41,13 @@ export default function ForgotPasswordPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isReady || !isAuthenticated) {
+    if (!isReady || !isAuthenticated || !isServerSessionSynced) {
       return;
     }
 
     const destination = isEmailVerified ? AUTHENTICATED_HOME_ROUTE : VERIFY_EMAIL_ROUTE;
     router.replace(destination);
-  }, [isAuthenticated, isEmailVerified, isReady, router]);
+  }, [isAuthenticated, isEmailVerified, isReady, isServerSessionSynced, router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -77,6 +84,14 @@ export default function ForgotPasswordPage() {
     return (
       <p className="mx-auto w-full max-w-5xl text-sm text-[var(--text-secondary)]">
         Vérification de la session...
+      </p>
+    );
+  }
+
+  if (isAuthenticated && !isServerSessionSynced) {
+    return (
+      <p className="mx-auto w-full max-w-5xl text-sm text-[var(--text-secondary)]">
+        Validation en cours...
       </p>
     );
   }

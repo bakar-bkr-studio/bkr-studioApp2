@@ -61,9 +61,16 @@ export async function GET(request: NextRequest) {
     return jsonError("Origin non autorisée.", 403, "cors/origin-not-allowed");
   }
 
+  console.log(`[API/profile] GET called`);
+
   try {
     const { uid, email } = await getAuthenticatedRequestContext(request);
+    console.log(`[API/profile] GET Resolved UID=${uid}, email=${email}`);
+    
+    console.log(`[API/profile] GET Fetching profile document...`);
     const { data } = await getOrCreateUserProfileDocument(uid, email);
+    console.log(`[API/profile] GET Profile fetched successfully`);
+    
     const profile = mapUserProfile(uid, data);
     return withCorsHeaders(request, jsonSuccess({ profile }, 200));
   } catch (error) {
@@ -74,7 +81,9 @@ export async function GET(request: NextRequest) {
         ? error.message
         : "Impossible de charger le profil.";
 
-    return jsonError(message, status, code);
+    console.error(`[API/profile] GET ERROR: ${code} - ${message}`, error);
+
+    return jsonError(`[Debug Info] ${message}`, status, code);
   }
 }
 
@@ -88,8 +97,11 @@ export async function PATCH(request: NextRequest) {
     return jsonError("Trop de requêtes. Réessayez plus tard.", 429, "rate-limit/exceeded");
   }
 
+  console.log(`[API/profile] PATCH called`);
+
   try {
     const { uid, email } = await getAuthenticatedRequestContext(request);
+    console.log(`[API/profile] PATCH Resolved UID=${uid}, email=${email}`);
 
     let body: unknown;
     try {
@@ -123,6 +135,8 @@ export async function PATCH(request: NextRequest) {
         ? error.message
         : "Impossible de mettre à jour le profil.";
 
-    return jsonError(message, status, code);
+    console.error(`[API/profile] PATCH ERROR: ${code} - ${message}`, error);
+
+    return jsonError(`[Debug Info] ${message}`, status, code);
   }
 }
