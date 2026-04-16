@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/PageHeader";
+import PageLoader from "@/components/PageLoader";
 import ProfileField from "@/components/profile/ProfileField";
 import ProfileHeader from "@/components/profile/ProfileHeader";
 import ProfileModal, { type ProfileModalFormData } from "@/components/profile/ProfileModal";
@@ -169,20 +170,7 @@ export default function ProfilePageClient() {
   }
 
   if (isLoading) {
-    return (
-      <>
-        <PageHeader
-          title="Profil"
-          description="Informations d'identité et d'activité professionnelle du compte utilisateur."
-        />
-
-        <div className="section-card">
-          <div className="section-card__body">
-            <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>Chargement du profil...</p>
-          </div>
-        </div>
-      </>
-    );
+    return <PageLoader variant="profile" title="Profil" description="Informations d'identité et d'activité professionnelle du compte utilisateur." />;
   }
 
   if (!profile || !sections) {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import EmptyState from "@/components/EmptyState";
+import PageLoader from "@/components/PageLoader";
 import ProjectModal, {
   type ProjectFormData,
   type ProjectTaskDraftData,
@@ -196,20 +197,7 @@ export default function ProjectDetailsPage({ projectId }: ProjectDetailsPageProp
   };
 
   if (isLoading) {
-    return (
-      <>
-        <div className="page-header">
-          <h1>Détail projet</h1>
-          <p>Chargement du projet...</p>
-        </div>
-
-        <div className="section-card">
-          <div className="section-card__body">
-            <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>Chargement des informations du projet...</p>
-          </div>
-        </div>
-      </>
-    );
+    return <PageLoader variant="default" title="Détail projet" description="Chargement du projet..." />;
   }
 
   if (!project) {

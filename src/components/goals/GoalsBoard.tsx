@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import EmptyState from "@/components/EmptyState";
+import PageLoader from "@/components/PageLoader";
 import GoalCard from "@/components/goals/GoalCard";
 import GoalDetailsModal from "@/components/goals/GoalDetailsModal";
 import GoalModal, { type GoalFormData } from "@/components/goals/GoalModal";
@@ -229,20 +230,7 @@ export default function GoalsBoard() {
   };
 
   if (isLoading) {
-    return (
-      <>
-        <div className="page-header">
-          <h1>Objectifs</h1>
-          <p>Suivez vos priorités business et créatives avec une vue claire par horizon.</p>
-        </div>
-
-        <div className="section-card">
-          <div className="section-card__body">
-            <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>Chargement des objectifs...</p>
-          </div>
-        </div>
-      </>
-    );
+    return <PageLoader variant="cards" title="Objectifs" description="Suivez vos priorités business et créatives avec une vue claire par horizon." />;
   }
 
   return (

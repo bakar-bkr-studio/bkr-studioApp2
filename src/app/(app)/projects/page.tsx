@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import EmptyState from "@/components/EmptyState";
+import PageLoader from "@/components/PageLoader";
 import ProjectCard from "@/components/projects/ProjectCard";
 import ProjectModal, {
   type ProjectFormData,
@@ -223,20 +224,7 @@ export default function ProjectsPage() {
   };
 
   if (isLoading) {
-    return (
-      <>
-        <div className="page-header">
-          <h1>Projets</h1>
-          <p>Gérez vos missions clients : devis, suivi, livraison.</p>
-        </div>
-
-        <div className="section-card">
-          <div className="section-card__body">
-            <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>Chargement des projets...</p>
-          </div>
-        </div>
-      </>
-    );
+    return <PageLoader variant="cards" title="Projets" description="Gérez vos missions clients : devis, suivi, livraison." />;
   }
 
   return (

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import EmptyState from "@/components/EmptyState";
+import PageLoader from "@/components/PageLoader";
 import KanbanColumn from "@/components/tasks/KanbanColumn";
 import TaskModal, { NO_PROJECT_VALUE, type TaskFormData } from "@/components/tasks/TaskModal";
 import TaskPreviewModal from "@/components/tasks/TaskPreviewModal";
@@ -347,20 +348,7 @@ export default function TasksBoard({ prefillProjectId }: TasksBoardProps) {
   };
 
   if (isLoading) {
-    return (
-      <>
-        <div className="page-header">
-          <h1>Tâches</h1>
-          <p>Organisez votre workflow en vue Kanban par priorité, échéance et projet.</p>
-        </div>
-
-        <div className="section-card">
-          <div className="section-card__body">
-            <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>Chargement des tâches...</p>
-          </div>
-        </div>
-      </>
-    );
+    return <PageLoader variant="kanban" title="Tâches" description="Organisez votre workflow en vue Kanban par priorité, échéance et projet." />;
   }
 
   return (

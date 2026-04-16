@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
+import PageLoader from "@/components/PageLoader";
 import StatCard from "@/components/StatCard";
 import SectionCard from "@/components/SectionCard";
 import DashboardNotes from "@/components/dashboard/DashboardNotes";
+import DashboardCalendar from "@/components/dashboard/DashboardCalendar";
 import DashboardLinks from "@/components/dashboard/DashboardLinks";
 import { listUserTransactions } from "@/features/finances/api/transactions";
 import type { Transaction } from "@/features/finances/types";
@@ -324,19 +326,7 @@ export default function DashboardPageClient() {
   );
 
   if (!isReady || isLoading) {
-    return (
-      <>
-        <PageHeader title="Dashboard" description="Aperçu de votre activité" />
-
-        <div className="section-card">
-          <div className="section-card__body">
-            <p style={{ fontSize: "14px", color: "var(--text-muted)" }}>
-              Chargement du dashboard...
-            </p>
-          </div>
-        </div>
-      </>
-    );
+    return <PageLoader variant="dashboard" title="Dashboard" description="Aperçu de votre activité" />;
   }
 
   return (
@@ -421,6 +411,21 @@ export default function DashboardPageClient() {
           icon={<IconGoals />}
           iconBg="var(--accent-subtle)"
           href="/goals"
+        />
+      </div>
+
+      {/* ── Calendrier de pilotage ── */}
+      <div className="dashboard-calendar-section">
+        <div className="dashboard-calendar-section__header">
+          <h2 className="dashboard-calendar-section__title">Calendrier</h2>
+          <p className="dashboard-calendar-section__sub">
+            Échéances et événements de votre activité
+          </p>
+        </div>
+        <DashboardCalendar
+          tasks={tasks}
+          projects={projects}
+          goals={goals}
         />
       </div>
 

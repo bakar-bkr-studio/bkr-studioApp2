@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import PageLoader from "@/components/PageLoader";
 import ContactsList from "@/components/contacts/ContactsList";
 import ContactModal from "@/components/contacts/ContactModal";
 import ContactDetailsModal from "@/components/contacts/ContactDetailsModal";
@@ -220,20 +221,7 @@ export default function ContactsPage() {
   };
 
   if (isLoading) {
-    return (
-      <>
-        <div className="page-header">
-          <h1>Contacts</h1>
-          <p>Gérez vos clients, prospects et partenaires.</p>
-        </div>
-
-        <div className="section-card">
-          <div className="section-card__body">
-            <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>Chargement des contacts...</p>
-          </div>
-        </div>
-      </>
-    );
+    return <PageLoader variant="cards" title="Contacts" description="Gérez vos clients, prospects et partenaires." />;
   }
 
   return (

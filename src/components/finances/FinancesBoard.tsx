@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import EmptyState from "@/components/EmptyState";
+import PageLoader from "@/components/PageLoader";
 import SectionCard from "@/components/SectionCard";
 import {
   createTransaction,
@@ -468,24 +469,7 @@ export default function FinancesBoard({
     projectFilter !== "all";
 
   if (isLoading) {
-    return (
-      <>
-        <div className="page-header">
-          <h1>Finances</h1>
-          <p>
-            Pilotez revenus, dépenses et flux prévus avec une vue mensuelle claire.
-          </p>
-        </div>
-
-        <div className="section-card">
-          <div className="section-card__body">
-            <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>
-              Chargement des transactions...
-            </p>
-          </div>
-        </div>
-      </>
-    );
+    return <PageLoader variant="dashboard" title="Finances" description="Pilotez revenus, dépenses et flux prévus avec une vue mensuelle claire." />;
   }
 
   return (
